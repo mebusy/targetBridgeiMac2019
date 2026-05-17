@@ -67,22 +67,35 @@ Write down the IP address shown in the startup window.
 1. Start `TargetBridge Receiver` on the iMac first
 2. Read the Thunderbolt Bridge IP shown by the receiver
 3. Open `TargetBridge` on the MacBook
-4. Enter that IP in the `Receiver IP` field
-5. Press `Connect`
+4. Choose `Extended display` to use the iMac as a separate desktop, or `Mirror MacBook` to duplicate the MacBook screen
+5. Enter that IP in the `Receiver IP` field
+6. Press `Connect`
 
 When the first frame arrives, the receiver switches to fullscreen automatically.
+
+For extended desktop, open macOS **System Settings → Displays → Arrange** on the sender Mac after connecting. Place the external TargetBridge display where you want it, then select that display in Display Settings and choose the matching resolution if the iMac does not fill correctly. For the 27-inch 5K path, use the `5K` stream profile with the external display set to the matching 5120 × 2880 / 2560 × 1440 HiDPI mode.
 
 ## Stream profiles
 
 - `Standard · 2560 × 1440`
-  - lower latency
-  - higher stability
-  - less sharp than native 5K
+  - conservative baseline
+  - highest compatibility
 
-- `5K · 5120 × 2880`
-  - sharper image
+- `Smooth · 2560 × 1440 @ 60`
+  - lower latency motion
+
+- `Smooth+ · 3200 × 1800 @ 60`
+  - sharper motion profile
+
+- `Crisp · 3840 × 2160 @ 48`
+  - clearer text
   - uses `HEVC`
-  - more load and slightly higher latency
+  - lighter than native 5K
+
+- `5K · 5120 × 2880 @ 48`
+  - native iMac 5K stream
+  - uses `HEVC`
+  - highest load
 
 ## Auto-start the receiver
 
@@ -103,6 +116,7 @@ cd TargetBridge-Receiver
 ## Practical notes
 
 - the receiver should be started before the sender
+- extended desktop requires arranging the new display in macOS Display Settings on the sender
 - the sender can show or hide its top bar icon
-- if 5K is not responsive enough, switch back to the `Standard` profile
+- if 5K is not responsive enough, switch back to `Crisp` or `Smooth+`
 - the sender build script uses a local DerivedData folder at `TargetBridge-Sender/.build/DerivedData`

@@ -193,7 +193,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = TargetBridge;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "TargetBridge - Free & Open Source";
-				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "TargetBridge richiede il permesso di registrazione schermo per catturare il desktop duplicato destinato all'iMac.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "TargetBridge richiede il permesso di registrazione schermo per catturare il monitor virtuale o duplicare il desktop sull'iMac.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -219,7 +219,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = TargetBridge;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "TargetBridge - Free & Open Source";
-				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "TargetBridge richiede il permesso di registrazione schermo per catturare il desktop duplicato destinato all'iMac.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "TargetBridge richiede il permesso di registrazione schermo per catturare il monitor virtuale o duplicare il desktop sull'iMac.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

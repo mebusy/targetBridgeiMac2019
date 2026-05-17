@@ -43,8 +43,19 @@ Unzip and double-click. On first launch, grant Screen Recording to the sender.
 
 ## Stream profiles
 
-- `Standard · 2560 × 1440` — low latency, high stability
-- `5K · 5120 × 2880` — sharper image, HEVC, slightly more load
+- `Standard · 2560 × 1440` — conservative baseline
+- `Smooth · 2560 × 1440 @ 60` — lower latency motion
+- `Smooth+ · 3200 × 1800 @ 60` — sharper motion profile
+- `Crisp · 3840 × 2160 @ 48` — clearer text with HEVC
+- `5K · 5120 × 2880 @ 48` — native iMac 5K stream with HEVC
+
+The sender can stream either an extended virtual display or a mirror of the MacBook display.
+
+## Extended Desktop
+
+For an extended desktop, choose `Extended display` on the sender before connecting. After the virtual display appears, open macOS **System Settings → Displays → Arrange** on the sender Mac and position the external display where you want it.
+
+If the receiver does not fill the iMac panel or the cursor/desktop feels scaled incorrectly, select the external TargetBridge display in macOS Display Settings and choose the matching resolution. For the 27-inch 5K iMac path, use a high-clarity stream profile such as `Crisp` or `5K` with the external display set to the matching 2560 × 1440 HiDPI mode.
 
 ## Projects
 

@@ -23,7 +23,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.targetbridge.sender
         INFOPLIST_KEY_CFBundleDisplayName: "TargetBridge"
         INFOPLIST_KEY_NSHumanReadableCopyright: "TargetBridge - Free & Open Source"
-        INFOPLIST_KEY_NSScreenCaptureUsageDescription: "TargetBridge richiede il permesso di registrazione schermo per catturare il desktop duplicato destinato all'iMac."
+        INFOPLIST_KEY_NSScreenCaptureUsageDescription: "TargetBridge richiede il permesso di registrazione schermo per catturare il monitor virtuale o duplicare il desktop sull'iMac."
         MARKETING_VERSION: "0.1.0-rc1"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"

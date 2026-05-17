@@ -66,6 +66,14 @@ struct TBDisplaySenderContentView: View {
 
             GroupBox(TBDisplaySenderL10n.streamResolutionGroup(service.language)) {
                 VStack(alignment: .leading, spacing: 10) {
+                    Picker(TBDisplaySenderL10n.captureSource(service.language), selection: $service.captureSource) {
+                        ForEach(TBDisplayCaptureSource.allCases) { source in
+                            Text(source.title(service.language)).tag(source)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(service.isConnected || service.isStreaming)
+
                     Picker(TBDisplaySenderL10n.streamProfile(service.language), selection: $service.capturePreset) {
                         ForEach(TBDisplayCapturePreset.allCases) { preset in
                             Text("\(preset.title(service.language)) · \(preset.description)").tag(preset)

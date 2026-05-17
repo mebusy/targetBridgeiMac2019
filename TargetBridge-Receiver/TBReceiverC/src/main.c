@@ -161,17 +161,22 @@ static void on_packet(uint8_t type, const uint8_t *payload, size_t len, void *ud
         }
         {
             char preset[64];
+            char source[64];
             char codec[64];
             int capture_w = 0;
             int capture_h = 0;
             preset[0] = '\0';
+            source[0] = '\0';
             codec[0] = '\0';
             extract_json_string_field(payload, len, "\"capturePreset\"", preset, sizeof(preset));
+            extract_json_string_field(payload, len, "\"captureSource\"", source, sizeof(source));
             extract_json_string_field(payload, len, "\"codec\"", codec, sizeof(codec));
             (void)extract_json_int_field(payload, len, "\"captureWidth\"", &capture_w);
             (void)extract_json_int_field(payload, len, "\"captureHeight\"", &capture_h);
 
-            if (capture_w > 0 && capture_h > 0 && preset[0] != '\0' && codec[0] != '\0') {
+            if (capture_w > 0 && capture_h > 0 && source[0] != '\0' && preset[0] != '\0' && codec[0] != '\0') {
+                snprintf(a->mode_text, sizeof(a->mode_text), "%d x %d px requested (%s, %s, %s)", capture_w, capture_h, source, preset, codec);
+            } else if (capture_w > 0 && capture_h > 0 && preset[0] != '\0' && codec[0] != '\0') {
                 snprintf(a->mode_text, sizeof(a->mode_text), "%d x %d px requested (%s, %s)", capture_w, capture_h, preset, codec);
             } else if (capture_w > 0 && capture_h > 0 && preset[0] != '\0') {
                 snprintf(a->mode_text, sizeof(a->mode_text), "%d x %d px requested (%s)", capture_w, capture_h, preset);
