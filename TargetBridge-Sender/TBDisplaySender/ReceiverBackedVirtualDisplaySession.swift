@@ -68,8 +68,14 @@ final class ReceiverBackedVirtualDisplaySession {
     private func activatePreferredMode(for displayID: CGDirectDisplayID, profile: TBMonitorDisplayProfile, refreshRate: Double) -> Bool {
         let timeout = Date().addingTimeInterval(2.0)
         while Date() < timeout {
-            if let preferredMode = preferredMode(for: displayID, profile: profile, refreshRate: refreshRate) {
-                return CGDisplaySetDisplayMode(displayID, preferredMode, nil) == .success
+            var success = false
+            autoreleasepool {
+                if let preferredMode = preferredMode(for: displayID, profile: profile, refreshRate: refreshRate) {
+                    success = CGDisplaySetDisplayMode(displayID, preferredMode, nil) == .success
+                }
+            }
+            if success {
+                return true
             }
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
         }
@@ -77,9 +83,10 @@ final class ReceiverBackedVirtualDisplaySession {
     }
 
     private func preferredMode(for displayID: CGDirectDisplayID, profile: TBMonitorDisplayProfile, refreshRate: Double) -> CGDisplayMode? {
-        guard let modes = CGDisplayCopyAllDisplayModes(displayID, nil) as? [CGDisplayMode] else {
+        guard let modesCF = CGDisplayCopyAllDisplayModes(displayID, nil) else {
             return nil
         }
+        let modes = modesCF as? [CGDisplayMode] ?? []
 
         let exactMatch = modes.first { mode in
             mode.width == profile.modeWidth
