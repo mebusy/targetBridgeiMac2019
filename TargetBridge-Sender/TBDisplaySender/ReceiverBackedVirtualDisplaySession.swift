@@ -50,9 +50,7 @@ final class ReceiverBackedVirtualDisplaySession {
             return false
         }
 
-        guard activatePreferredMode(for: display.displayID, profile: profile, refreshRate: preferredRefreshRate) else {
-            return false
-        }
+        activatePreferredMode(for: display.displayID, profile: profile, refreshRate: preferredRefreshRate)
 
         virtualDisplay = display
         displayID = display.displayID
@@ -66,6 +64,7 @@ final class ReceiverBackedVirtualDisplaySession {
         displayName = ""
     }
 
+    @discardableResult
     private func activatePreferredMode(for displayID: CGDirectDisplayID, profile: TBMonitorDisplayProfile, refreshRate: Double) -> Bool {
         let timeout = Date().addingTimeInterval(2.0)
         while Date() < timeout {
