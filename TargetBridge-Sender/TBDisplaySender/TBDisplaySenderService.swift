@@ -516,6 +516,7 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
         vtEncoder = nil
         vtEncoderRef?.release()
         vtEncoderRef = nil
+        connection?.stateUpdateHandler = nil
         connection?.cancel()
         connection = nil
         let currentSession = session
