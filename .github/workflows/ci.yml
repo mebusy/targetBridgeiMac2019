@@ -1,0 +1,53 @@
+name: CI Build Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-sender:
+    name: Build Sender (macOS 14 - Apple Silicon)
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Tools
+        run: |
+          brew install xcodegen
+
+      - name: Ensure Desktop Directory Exists
+        run: mkdir -p ~/Desktop
+
+      - name: Build Sender App
+        run: |
+          cd TargetBridge-Sender
+          ./scripts/build_targetbridge_sender_app.sh
+
+  build-receiver:
+    name: Build Receiver (${{ matrix.os }} - ${{ matrix.arch }})
+    strategy:
+      matrix:
+        include:
+          - os: macos-13
+            arch: x86_64
+          - os: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          brew install ffmpeg sdl2 pkg-config dylibbundler
+
+      - name: Ensure Desktop Directory Exists
+        run: mkdir -p ~/Desktop
+
+      - name: Build Receiver App
+        run: |
+          cd TargetBridge-Receiver
+          ./scripts/build_tbreceiver_c_app.sh

@@ -1,0 +1,103 @@
+name: Release Build & Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-sender:
+    name: Build Sender (Apple Silicon)
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Tools
+        run: |
+          brew install xcodegen
+
+      - name: Ensure Desktop Directory Exists
+        run: mkdir -p ~/Desktop
+
+      - name: Build Sender App
+        run: |
+          cd TargetBridge-Sender
+          ./scripts/build_targetbridge_sender_app.sh
+
+      - name: Zip App Bundle
+        run: |
+          cd ~/Desktop
+          zip -r TargetBridge.app.zip TargetBridge.app
+
+      - name: Upload Sender Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TargetBridge.app.zip
+          path: ~/Desktop/TargetBridge.app.zip
+          retention-days: 1
+
+  build-receiver:
+    name: Build Receiver (Intel x86_64)
+    runs-on: macos-13
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          brew install ffmpeg sdl2 pkg-config dylibbundler
+
+      - name: Ensure Desktop Directory Exists
+        run: mkdir -p ~/Desktop
+
+      - name: Build Receiver App
+        run: |
+          cd TargetBridge-Receiver
+          ./scripts/build_tbreceiver_c_app.sh
+
+      - name: Zip App Bundle
+        run: |
+          cd ~/Desktop
+          zip -r TargetBridge-Receiver.app.zip "TargetBridge Receiver.app"
+
+      - name: Upload Receiver Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TargetBridge-Receiver.app.zip
+          path: ~/Desktop/TargetBridge-Receiver.app.zip
+          retention-days: 1
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-sender, build-receiver]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Sender Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: TargetBridge.app.zip
+          path: ./artifacts
+
+      - name: Download Receiver Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: TargetBridge-Receiver.app.zip
+          path: ./artifacts
+
+      - name: Create Draft Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            ./artifacts/TargetBridge.app.zip \
+            ./artifacts/TargetBridge-Receiver.app.zip \
+            --title "TargetBridge ${{ github.ref_name }}" \
+            --draft \
+            --generate-notes
