@@ -95,6 +95,8 @@ struct TBDisplaySenderContentView: View {
                     infoRow(TBDisplaySenderL10n.virtualDisplayLabel(service.language), service.virtualDisplayText)
                     infoRow(TBDisplaySenderL10n.streamLabel(service.language), service.streamResolutionText)
                     infoRow(TBDisplaySenderL10n.fpsLabel(service.language), "\(service.senderFPS)")
+                    infoRow("Capture", service.captureDisplayText)
+                    infoRow("State", service.displayStateText)
                 }
             }
 

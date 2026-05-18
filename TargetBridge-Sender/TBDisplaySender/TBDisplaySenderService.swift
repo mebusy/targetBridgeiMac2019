@@ -251,6 +251,15 @@ enum TBDisplayCaptureSource: String, CaseIterable, Identifiable {
         case (.extendedDesktop, .german): return "Erweiterter Desktop"
         }
     }
+
+    var virtualDisplayIdentity: TBVirtualDisplayIdentity {
+        switch self {
+        case .desktopMirror:
+            return .desktopMirror
+        case .extendedDesktop:
+            return .extendedDesktop()
+        }
+    }
 }
 
 private final class TBDirectDisplayStreamCapture {
@@ -321,6 +330,8 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
     @Published var senderFPS = 0
     @Published var receiverPanelText = TBDisplaySenderL10n.waitingReceiverProfile(TBDisplaySenderLanguage.load())
     @Published var virtualDisplayText = TBDisplaySenderL10n.virtualDisplayNotCreated(TBDisplaySenderLanguage.load())
+    @Published var captureDisplayText = "Capture display: n/a"
+    @Published var displayStateText = "Display state: n/a"
     @Published var language: TBDisplaySenderLanguage = .load() {
         didSet {
             language.persist()
@@ -565,6 +576,8 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
         baselineDisplayIDs = []
         cursorDisplayID = kCGNullDirectDisplay
         lastCursorPacket = nil
+        captureDisplayText = "Capture display: n/a"
+        displayStateText = "Display state: n/a"
     }
 
     private func sendHello() {
@@ -651,32 +664,42 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
         receiverPanelText = TBDisplaySenderL10n.receiverSummary(profile, language: language)
 
         Task { @MainActor in
-            if self.captureSource == .desktopMirror {
-                self.setStatus(.creatingVirtualDisplay)
-                self.baselineDisplayIDs = await self.fetchShareableDisplayIDs()
-                guard self.session.create(from: profile, refreshRate: self.capturePreset.virtualDisplayRefreshRate) else {
-                    self.setStatus(.virtualDisplayCreationFailed)
-                    self.stop(resetStatusTo: nil)
-                    return
-                }
-                // Force extended desktop mode — prevent macOS from defaulting to mirror
-                var displayConfig: CGDisplayConfigRef?
-                if CGBeginDisplayConfiguration(&displayConfig) == .success, let cfg = displayConfig {
-                    CGConfigureDisplayMirrorOfDisplay(cfg, self.session.displayID, kCGNullDirectDisplay)
-                    CGCompleteDisplayConfiguration(cfg, .forSession)
-                }
-                self.virtualDisplayText = TBDisplaySenderL10n.virtualDisplaySummary(
-                    name: self.session.displayName,
-                    id: self.session.displayID,
-                    language: self.language
-                )
+            self.setStatus(.creatingVirtualDisplay)
+            self.baselineDisplayIDs = await self.fetchShareableDisplayIDs()
+            guard self.session.create(
+                from: profile,
+                refreshRate: self.capturePreset.virtualDisplayRefreshRate,
+                identity: self.captureSource.virtualDisplayIdentity
+            ) else {
+                self.setStatus(.virtualDisplayCreationFailed)
+                self.stop(resetStatusTo: nil)
+                return
             }
+            if self.captureSource == .desktopMirror {
+                let mirrorConfigured = self.configureDesktopMirror(for: self.session.displayID)
+                if !mirrorConfigured {
+                    NSLog(
+                        "TargetBridge: unable to enable mirror mode for virtual display %u; continuing with extended desktop fallback",
+                        self.session.displayID
+                    )
+                }
+            }
+            self.virtualDisplayText = TBDisplaySenderL10n.virtualDisplaySummary(
+                name: self.session.displayName,
+                id: self.session.displayID,
+                language: self.language
+            )
+            self.displayStateText = self.describeDisplayState(for: self.session.displayID)
 
             self.setStatus(.startingCapture(self.capturePreset.description, self.captureSource))
             let started = await self.startCapture(for: profile)
             guard started else {
                 self.stop(resetStatusTo: nil)
                 return
+            }
+
+            if self.captureSource == .extendedDesktop {
+                self.scheduleExtendedDesktopRecovery(for: self.session.displayID)
             }
 
             self.sessionAckSent = false
@@ -687,9 +710,16 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
 
     private func startCapture(for profile: TBMonitorDisplayProfile) async -> Bool {
         do {
-            let display = try await waitForCaptureDisplay()
             let preset = capturePreset
-            if startDirectDisplayStream(for: display, preset: preset) {
+
+            if captureSource == .extendedDesktop, session.displayID != kCGNullDirectDisplay {
+                if startDirectDisplayStream(displayID: session.displayID, preset: preset) {
+                    return true
+                }
+            }
+
+            let display = try await waitForCaptureDisplay()
+            if startDirectDisplayStream(displayID: display.displayID, preset: preset) {
                 return true
             }
 
@@ -726,6 +756,7 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
             captureDelegate = delegate
 
             let filter = SCContentFilter(display: display, excludingWindows: [])
+            captureDisplayText = "Capture display: SCDisplay \(display.displayID)"
             let stream = SCStream(filter: filter, configuration: configuration, delegate: delegate)
             try stream.addStreamOutput(
                 delegate,
@@ -753,7 +784,7 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
         }
     }
 
-    private func startDirectDisplayStream(for display: SCDisplay, preset: TBDisplayCapturePreset) -> Bool {
+    private func startDirectDisplayStream(displayID: CGDirectDisplayID, preset: TBDisplayCapturePreset) -> Bool {
         setupEncoder(
             width: preset.width,
             height: preset.height,
@@ -767,13 +798,14 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
         streamResolutionText = TBDisplaySenderL10n.streamSummary(preset: preset, source: captureSource, language: language)
 
         let directCapture = TBDirectDisplayStreamCapture(service: self, queue: connectionQueue)
-        guard directCapture.start(displayID: display.displayID, preset: preset, showCursor: !largeCursor) else {
+        guard directCapture.start(displayID: displayID, preset: preset, showCursor: !largeCursor) else {
             return false
         }
 
         directDisplayStream = directCapture
+        captureDisplayText = "Capture display: CGDisplayStream \(displayID)"
         isStreaming = true
-        if largeCursor { startCursorUpdates(displayID: display.displayID) }
+        if largeCursor { startCursorUpdates(displayID: displayID) }
         streamingActivity = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiated, .idleSystemSleepDisabled],
             reason: "TargetBridge streaming active"
@@ -783,15 +815,10 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
     }
 
     private func waitForCaptureDisplay() async throws -> SCDisplay {
-        switch captureSource {
-        case .desktopMirror:
-            return try await waitForVirtualDisplay(
-                matching: session.displayID,
-                baselineDisplayIDs: baselineDisplayIDs
-            )
-        case .extendedDesktop:
-            return try await waitForMirrorDisplay()
-        }
+        try await waitForVirtualDisplay(
+            matching: session.displayID,
+            baselineDisplayIDs: baselineDisplayIDs
+        )
     }
 
     private func waitForVirtualDisplay(
@@ -831,47 +858,8 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
         let availableIDs = content.displays.map { String($0.displayID) }.sorted().joined(separator: ", ")
         let baselineIDs = baselineDisplayIDs.map(String.init).sorted().joined(separator: ", ")
         let onlineIDs = onlineDisplayIDs().map(String.init).sorted().joined(separator: ", ")
-        if let fallbackDisplay = content.displays.first {
-            NSLog(
-                "TargetBridge: virtual display not exposed to ScreenCaptureKit; falling back to SCDisplay %@. target=%u baseline=[%@] available=[%@] online=[%@]",
-                String(fallbackDisplay.displayID),
-                targetDisplayID,
-                baselineIDs,
-                availableIDs,
-                onlineIDs
-            )
-            return fallbackDisplay
-        }
         throw DisplayLookupError.notFound(
             details: "nessun SCDisplay virtuale disponibile (target=\(targetDisplayID), baseline=[\(baselineIDs)], disponibili=[\(availableIDs)], online=[\(onlineIDs)])"
-        )
-    }
-
-    private func waitForMirrorDisplay() async throws -> SCDisplay {
-        enum DisplayLookupError: LocalizedError {
-            case notFound(details: String)
-
-            var errorDescription: String? {
-                switch self {
-                case .notFound(let details):
-                    return details
-                }
-            }
-        }
-
-        for _ in 0..<12 {
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
-            let mainDisplayID = CGMainDisplayID()
-            if let display = content.displays.first(where: { $0.displayID == mainDisplayID }) {
-                return display
-            }
-            try await Task.sleep(nanoseconds: 250_000_000)
-        }
-
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
-        let availableIDs = content.displays.map { String($0.displayID) }.sorted().joined(separator: ", ")
-        throw DisplayLookupError.notFound(
-            details: "nessun SCDisplay mirror disponibile (main=\(CGMainDisplayID()), disponibili=[\(availableIDs)])"
         )
     }
 
@@ -882,6 +870,129 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
         } catch {
             return []
         }
+    }
+
+    private func configureDesktopMirror(for virtualDisplayID: CGDirectDisplayID) -> Bool {
+        let deadline = Date().addingTimeInterval(2.0)
+        while Date() < deadline {
+            var displayConfig: CGDisplayConfigRef?
+            guard CGBeginDisplayConfiguration(&displayConfig) == .success, let cfg = displayConfig else {
+                return false
+            }
+
+            let result = CGConfigureDisplayMirrorOfDisplay(cfg, virtualDisplayID, CGMainDisplayID())
+            if result == .success {
+                let complete = CGCompleteDisplayConfiguration(cfg, .forSession)
+                if complete == .success {
+                    return true
+                }
+            } else {
+                CGCancelDisplayConfiguration(cfg)
+            }
+
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.1))
+        }
+
+        return false
+    }
+
+    private func scheduleExtendedDesktopRecovery(for virtualDisplayID: CGDirectDisplayID) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            for attempt in 1...12 {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+
+                guard self.captureSource == .extendedDesktop,
+                      self.session.displayID == virtualDisplayID,
+                      self.activeProfile != nil
+                else { return }
+
+                if CGDisplayIsInMirrorSet(virtualDisplayID) == 0 {
+                    self.displayStateText = self.describeDisplayState(for: virtualDisplayID)
+                    return
+                }
+
+                let configured = self.configureExtendedDesktop(for: virtualDisplayID)
+                self.displayStateText = self.describeDisplayState(for: virtualDisplayID)
+                NSLog(
+                    "TargetBridge: extended desktop recovery attempt %d for %u configured=%d state=%@",
+                    attempt,
+                    virtualDisplayID,
+                    configured,
+                    self.displayStateText
+                )
+
+                if configured || CGDisplayIsInMirrorSet(virtualDisplayID) == 0 {
+                    return
+                }
+            }
+        }
+    }
+
+    private func configureExtendedDesktop(for virtualDisplayID: CGDirectDisplayID) -> Bool {
+        let deadline = Date().addingTimeInterval(2.0)
+        while Date() < deadline {
+            var displayConfig: CGDisplayConfigRef?
+            guard CGBeginDisplayConfiguration(&displayConfig) == .success, let cfg = displayConfig else {
+                return false
+            }
+
+            let mainDisplayID = CGMainDisplayID()
+            let mainBounds = CGDisplayBounds(mainDisplayID)
+            let mainMirrorResult = CGConfigureDisplayMirrorOfDisplay(cfg, mainDisplayID, kCGNullDirectDisplay)
+            let virtualMirrorResult = CGConfigureDisplayMirrorOfDisplay(cfg, virtualDisplayID, kCGNullDirectDisplay)
+            if mainMirrorResult != .success || virtualMirrorResult != .success {
+                CGCancelDisplayConfiguration(cfg)
+                NSLog(
+                    "TargetBridge: failed to detach mirror set for extended desktop (main=%d virtual=%d)",
+                    mainMirrorResult.rawValue,
+                    virtualMirrorResult.rawValue
+                )
+                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.1))
+                continue
+            }
+
+            let mainOriginResult = CGConfigureDisplayOrigin(cfg, mainDisplayID, 0, 0)
+            let targetX = Int32(mainBounds.maxX.rounded())
+            let targetY = Int32(mainBounds.origin.y.rounded())
+            let originResult = CGConfigureDisplayOrigin(cfg, virtualDisplayID, targetX, targetY)
+            if mainOriginResult != .success || originResult != .success {
+                CGCancelDisplayConfiguration(cfg)
+                NSLog(
+                    "TargetBridge: failed to position displays for extended desktop (main=%d virtual=%u result=%d)",
+                    mainOriginResult.rawValue,
+                    virtualDisplayID,
+                    originResult.rawValue
+                )
+                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.1))
+                continue
+            }
+
+            let complete = CGCompleteDisplayConfiguration(cfg, .forSession)
+            if complete == .success {
+                return true
+            }
+            NSLog(
+                "TargetBridge: CGCompleteDisplayConfiguration failed while forcing extended desktop for %u (result=%d)",
+                virtualDisplayID,
+                complete.rawValue
+            )
+
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.1))
+        }
+
+        return CGDisplayIsInMirrorSet(virtualDisplayID) == 0
+    }
+
+    private func describeDisplayState(for virtualDisplayID: CGDirectDisplayID) -> String {
+        let mainDisplayID = CGMainDisplayID()
+        let virtualMirror = CGDisplayIsInMirrorSet(virtualDisplayID) != 0
+        let mainMirror = CGDisplayIsInMirrorSet(mainDisplayID) != 0
+        let virtualMirrors = CGDisplayMirrorsDisplay(virtualDisplayID)
+        let mainMirrors = CGDisplayMirrorsDisplay(mainDisplayID)
+        let identity = session.identityDescription.isEmpty ? "identity=n/a" : session.identityDescription
+        return "Display state: \(identity) | virtual=\(virtualDisplayID) mirror=\(virtualMirror) mirrors=\(virtualMirrors) | main=\(mainDisplayID) mirror=\(mainMirror) mirrors=\(mainMirrors)"
     }
 
     private func onlineDisplayIDs() -> [CGDirectDisplayID] {

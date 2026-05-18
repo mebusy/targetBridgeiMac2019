@@ -27,6 +27,8 @@
 @property (nonatomic) uint32_t vendorID;
 @property (nonatomic) uint32_t productID;
 @property (nonatomic) uint32_t serialNum;
+@property (nonatomic) uint32_t serialNumber;
+@property (nonatomic, copy) id terminationHandler;
 @end
 
 @interface CGVirtualDisplayMode : NSObject

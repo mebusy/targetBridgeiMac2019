@@ -238,11 +238,11 @@ enum TBDisplaySenderL10n {
     static func streamHint1(_ language: TBDisplaySenderLanguage) -> String {
         switch language {
         case .italian:
-            return "`Duplica Desktop` usa il monitor virtuale. `Desktop Esteso` cattura il display principale."
+            return "`Duplica Desktop` crea un monitor virtuale e lo mette in mirror col display principale. `Desktop Esteso` crea un monitor virtuale separato visibile nelle impostazioni schermo."
         case .english:
-            return "`Duplicate Desktop` uses the virtual monitor. `Extended Desktop` captures the main display."
+            return "`Duplicate Desktop` creates a virtual monitor and mirrors the main display onto it. `Extended Desktop` creates a separate virtual monitor visible in Display Settings."
         case .german:
-            return "`Desktop duplizieren` nutzt das virtuelle Display. `Erweiterter Desktop` erfasst das Hauptdisplay."
+            return "`Desktop duplizieren` erstellt ein virtuelles Display und spiegelt den Hauptbildschirm darauf. `Erweiterter Desktop` erstellt ein separates virtuelles Display, das in den Anzeigeeinstellungen sichtbar ist."
         }
     }
 
@@ -319,9 +319,9 @@ enum TBDisplaySenderL10n {
 
     static func modeLine3(_ language: TBDisplaySenderLanguage) -> String {
         switch language {
-        case .italian: return "Pipeline: virtual display o mirror → capture diretta → codec hardware → TCP"
-        case .english: return "Pipeline: virtual display or mirror → direct capture → hardware codec → TCP"
-        case .german: return "Pipeline: Virtuelles Display oder Mirror → Direkte Aufnahme → Hardware-Codec → TCP"
+        case .italian: return "Pipeline: virtual display reale (esteso o mirror) → capture diretta → codec hardware → TCP"
+        case .english: return "Pipeline: real virtual display (extended or mirrored) → direct capture → hardware codec → TCP"
+        case .german: return "Pipeline: echtes virtuelles Display (erweitert oder gespiegelt) → direkte Aufnahme → Hardware-Codec → TCP"
         }
     }
 

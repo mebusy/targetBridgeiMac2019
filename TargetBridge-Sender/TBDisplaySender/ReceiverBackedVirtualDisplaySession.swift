@@ -5,23 +5,51 @@ extension CGVirtualDisplayDescriptor: @unchecked @retroactive Sendable {}
 extension CGVirtualDisplay: @unchecked @retroactive Sendable {}
 extension CGVirtualDisplaySettings: @unchecked @retroactive Sendable {}
 
+struct TBVirtualDisplayIdentity {
+    let productID: UInt32
+    let serialNumber: UInt32
+    let displayNamePrefix: String
+    let usesDedicatedArrangementIdentity: Bool
+
+    static let desktopMirror = TBVirtualDisplayIdentity(
+        productID: 0x5000,
+        serialNumber: 0x2026,
+        displayNamePrefix: "TB Mirror",
+        usesDedicatedArrangementIdentity: false
+    )
+
+    static func extendedDesktop() -> TBVirtualDisplayIdentity {
+        let random = UInt32.random(in: 0x0100...0xFFFE)
+        return TBVirtualDisplayIdentity(
+            productID: 0x6000 | (random & 0x00FF),
+            serialNumber: 0x2027_0000 | random,
+            displayNamePrefix: "TB Extend",
+            usesDedicatedArrangementIdentity: true
+        )
+    }
+}
+
 @MainActor
 final class ReceiverBackedVirtualDisplaySession {
     private var virtualDisplay: CGVirtualDisplay?
     private(set) var displayID: CGDirectDisplayID = kCGNullDirectDisplay
     private(set) var displayName: String = ""
-    private let displayQueue = DispatchQueue(label: "fd.tbmonitor.sender.virtual-display", qos: .userInitiated)
+    private(set) var identityDescription: String = ""
 
-    func create(from profile: TBMonitorDisplayProfile, refreshRate: Double? = nil) -> Bool {
+    func create(
+        from profile: TBMonitorDisplayProfile,
+        refreshRate: Double? = nil,
+        identity: TBVirtualDisplayIdentity
+    ) -> Bool {
         destroy()
         let preferredRefreshRate = refreshRate ?? profile.refreshRate
 
         let descriptor = CGVirtualDisplayDescriptor()
-        descriptor.queue = displayQueue
-        descriptor.name = "TB Monitor - \(profile.receiverName)"
+        descriptor.name = "\(identity.displayNamePrefix) - \(profile.receiverName)"
         descriptor.vendorID = 0xEEEE
-        descriptor.productID = 0x5000
-        descriptor.serialNum = 0x2026
+        descriptor.productID = identity.productID
+        descriptor.serialNum = identity.serialNumber
+        descriptor.serialNumber = identity.serialNumber
         descriptor.maxPixelsWide = UInt32(profile.panelWidth)
         descriptor.maxPixelsHigh = UInt32(profile.panelHeight)
 
@@ -55,6 +83,7 @@ final class ReceiverBackedVirtualDisplaySession {
         virtualDisplay = display
         displayID = display.displayID
         displayName = profile.receiverName
+        identityDescription = "vendor=0x\(String(descriptor.vendorID, radix: 16)) product=0x\(String(identity.productID, radix: 16)) serial=0x\(String(identity.serialNumber, radix: 16))"
         return true
     }
 
@@ -62,6 +91,7 @@ final class ReceiverBackedVirtualDisplaySession {
         virtualDisplay = nil
         displayID = kCGNullDirectDisplay
         displayName = ""
+        identityDescription = ""
     }
 
     @discardableResult
