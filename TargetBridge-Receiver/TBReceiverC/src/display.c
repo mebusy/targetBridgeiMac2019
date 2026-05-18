@@ -267,6 +267,7 @@ struct tb_display *tb_disp_create(int fullscreen) {
         fprintf(stderr, "[disp] CreateRenderer: %s\n", SDL_GetError());
         SDL_DestroyWindow(d->win); free(d); return NULL;
     }
+    SDL_SetYUVConversionMode(SDL_YUV_CONVERSION_BT709);
     SDL_RenderSetLogicalSize(d->ren, 0, 0);
 
     /* report which backend SDL picked */
