@@ -231,6 +231,9 @@ static void tb_disp_refresh_window_mode(struct tb_display *d) {
 }
 
 struct tb_display *tb_disp_create(int fullscreen) {
+    /* Force OpenGL renderer driver to avoid Metal's HDR/swapchain flickering on macOS Tahoe. */
+    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
+
     /* Best-quality scaling (linear filter; Metal backend uses bilinear
      * regardless but this sets the hint correctly). "best" enables
      * anisotropic where supported. Must be set BEFORE renderer creation. */
