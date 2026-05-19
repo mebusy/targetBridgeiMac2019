@@ -32,18 +32,11 @@ final class TBDisplaySenderStatusItemController: NSObject {
             }
             .store(in: &cancellables)
 
-        Publishers.MergeMany(
-            service.$language.map { _ in () }.eraseToAnyPublisher(),
-            service.$statusText.map { _ in () }.eraseToAnyPublisher(),
-            service.$isConnected.map { _ in () }.eraseToAnyPublisher(),
-            service.$isStreaming.map { _ in () }.eraseToAnyPublisher(),
-            service.$myTBIP.map { _ in () }.eraseToAnyPublisher(),
-            service.$receiverIP.map { _ in () }.eraseToAnyPublisher()
-        )
-        .sink { [weak self] in
-            self?.refreshStatusItem()
-        }
-        .store(in: &cancellables)
+        service.objectWillChange
+            .sink { [weak self] _ in
+                self?.refreshStatusItem()
+            }
+            .store(in: &cancellables)
     }
 
     private func observeApplicationLifecycle() {
@@ -98,14 +91,21 @@ final class TBDisplaySenderStatusItemController: NSObject {
         titleItem.isEnabled = false
         menu.addItem(titleItem)
 
-        let statusItem = NSMenuItem(title: service.statusText, action: nil, keyEquivalent: "")
+        let statusItem = NSMenuItem(title: service.summaryStatusText(), action: nil, keyEquivalent: "")
         statusItem.isEnabled = false
         menu.addItem(statusItem)
 
-        if let ip = service.myTBIP {
-            let ipItem = NSMenuItem(title: TBDisplaySenderL10n.topBarIP(service.language, ip), action: nil, keyEquivalent: "")
+        if !service.bridgeInterfaces.isEmpty {
+            let ipItem = NSMenuItem(title: TBDisplaySenderL10n.topBarIP(service.language, service.bridgeSummaryText), action: nil, keyEquivalent: "")
             ipItem.isEnabled = false
             menu.addItem(ipItem)
+        }
+
+        for session in service.sessions {
+            let line = "\(service.sessionTitle(for: session)): \(session.statusText)"
+            let sessionItem = NSMenuItem(title: line, action: nil, keyEquivalent: "")
+            sessionItem.isEnabled = false
+            menu.addItem(sessionItem)
         }
 
         menu.addItem(.separator())
@@ -118,13 +118,22 @@ final class TBDisplaySenderStatusItemController: NSObject {
         openItem.target = self
         menu.addItem(openItem)
 
-        let connectTitle = service.isConnected
-            ? TBDisplaySenderL10n.stopButton(service.language)
-            : TBDisplaySenderL10n.connectButton(service.language)
-        let connectItem = NSMenuItem(title: connectTitle, action: #selector(toggleConnection), keyEquivalent: "")
-        connectItem.target = self
-        connectItem.isEnabled = service.isConnected || !service.receiverIP.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        menu.addItem(connectItem)
+        let addItem = NSMenuItem(
+            title: TBDisplaySenderL10n.addSessionButton(service.language),
+            action: #selector(addSession),
+            keyEquivalent: ""
+        )
+        addItem.target = self
+        menu.addItem(addItem)
+
+        let stopAllItem = NSMenuItem(
+            title: TBDisplaySenderL10n.stopAllButton(service.language),
+            action: #selector(stopAll),
+            keyEquivalent: ""
+        )
+        stopAllItem.target = self
+        stopAllItem.isEnabled = service.anyConnected
+        menu.addItem(stopAllItem)
 
         let hideItem = NSMenuItem(
             title: TBDisplaySenderL10n.hideMenuBarIcon(service.language),
@@ -152,12 +161,13 @@ final class TBDisplaySenderStatusItemController: NSObject {
     }
 
     @objc
-    private func toggleConnection() {
-        if service.isConnected {
-            service.stop()
-        } else {
-            service.connect()
-        }
+    private func addSession() {
+        service.addSession()
+    }
+
+    @objc
+    private func stopAll() {
+        service.stopAll()
     }
 
     @objc

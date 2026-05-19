@@ -167,6 +167,14 @@ enum TBDisplaySenderL10n {
         }
     }
 
+    static func availableTBInterfaces(_ language: TBDisplaySenderLanguage) -> String {
+        switch language {
+        case .italian: return "Interfacce Thunderbolt"
+        case .english: return "Thunderbolt interfaces"
+        case .german: return "Thunderbolt-Schnittstellen"
+        }
+    }
+
     static func notDetected(_ language: TBDisplaySenderLanguage) -> String {
         switch language {
         case .italian: return "Non rilevato"
@@ -180,6 +188,22 @@ enum TBDisplaySenderL10n {
         case .italian: return "IP receiver"
         case .english: return "Receiver IP"
         case .german: return "Empfänger-IP"
+        }
+    }
+
+    static func discoveredReceiver(_ language: TBDisplaySenderLanguage) -> String {
+        switch language {
+        case .italian: return "Receiver trovato"
+        case .english: return "Discovered receiver"
+        case .german: return "Gefundener Empfänger"
+        }
+    }
+
+    static func manualReceiverEntry(_ language: TBDisplaySenderLanguage) -> String {
+        switch language {
+        case .italian: return "Inserimento manuale"
+        case .english: return "Manual entry"
+        case .german: return "Manuelle Eingabe"
         }
     }
 
@@ -200,6 +224,30 @@ enum TBDisplaySenderL10n {
         case .italian: return "Aggiorna IP"
         case .english: return "Refresh IP"
         case .german: return "IP aktualisieren"
+        }
+    }
+
+    static func addSessionButton(_ language: TBDisplaySenderLanguage) -> String {
+        switch language {
+        case .italian: return "Aggiungi sessione"
+        case .english: return "Add session"
+        case .german: return "Sitzung hinzufügen"
+        }
+    }
+
+    static func stopAllButton(_ language: TBDisplaySenderLanguage) -> String {
+        switch language {
+        case .italian: return "Ferma tutto"
+        case .english: return "Stop all"
+        case .german: return "Alle stoppen"
+        }
+    }
+
+    static func removeSessionButton(_ language: TBDisplaySenderLanguage) -> String {
+        switch language {
+        case .italian: return "Rimuovi sessione"
+        case .english: return "Remove session"
+        case .german: return "Sitzung entfernen"
         }
     }
 
@@ -254,6 +302,28 @@ enum TBDisplaySenderL10n {
             return "`Smooth+` prioritizes motion. `Crisp` improves clarity. `5K` maximizes pixels."
         case .german:
             return "`Smooth+` bevorzugt flüssige Bewegung. `Crisp` verbessert die Schärfe. `5K` maximiert die Pixel."
+        }
+    }
+
+    static func multiSessionHint(_ language: TBDisplaySenderLanguage) -> String {
+        switch language {
+        case .italian:
+            return "Ogni sessione usa un IP Thunderbolt locale dedicato e uno stream indipendente verso il suo iMac."
+        case .english:
+            return "Each session uses its own local Thunderbolt IP and an independent stream to its target iMac."
+        case .german:
+            return "Jede Sitzung verwendet eine eigene lokale Thunderbolt-IP und einen unabhängigen Stream zu ihrem Ziel-iMac."
+        }
+    }
+
+    static func discoveryHint(_ language: TBDisplaySenderLanguage) -> String {
+        switch language {
+        case .italian:
+            return "Se selezioni un receiver trovato automaticamente, l'IP viene compilato da solo."
+        case .english:
+            return "Selecting a discovered receiver fills in the receiver IP automatically."
+        case .german:
+            return "Wenn du einen gefundenen Empfänger auswählst, wird die Empfänger-IP automatisch eingetragen."
         }
     }
 
@@ -378,6 +448,30 @@ enum TBDisplaySenderL10n {
         case .italian: return "IP TB: \(ip)"
         case .english: return "TB IP: \(ip)"
         case .german: return "TB-IP: \(ip)"
+        }
+    }
+
+    static func sessionTitle(_ language: TBDisplaySenderLanguage, index: Int) -> String {
+        switch language {
+        case .italian: return "Sessione \(index)"
+        case .english: return "Session \(index)"
+        case .german: return "Sitzung \(index)"
+        }
+    }
+
+    static func multiSessionSummaryConnected(_ language: TBDisplaySenderLanguage, active: Int, total: Int) -> String {
+        switch language {
+        case .italian: return "\(active) sessioni collegate su \(total)"
+        case .english: return "\(active) connected sessions of \(total)"
+        case .german: return "\(active) verbundene Sitzungen von \(total)"
+        }
+    }
+
+    static func multiSessionSummaryStreaming(_ language: TBDisplaySenderLanguage, active: Int, total: Int) -> String {
+        switch language {
+        case .italian: return "\(active) sessioni attive su \(total)"
+        case .english: return "\(active) active sessions of \(total)"
+        case .german: return "\(active) aktive Sitzungen von \(total)"
         }
     }
 

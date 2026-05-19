@@ -12,7 +12,6 @@ struct TBDisplaySenderApp: App {
                     statusItemController.activate()
                 }
         }
-        .defaultSize(width: 460, height: 420)
-        .windowResizability(.contentSize)
+        .defaultSize(width: 860, height: 860)
     }
 }

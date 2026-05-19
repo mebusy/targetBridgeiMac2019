@@ -267,7 +267,7 @@ private final class TBDirectDisplayStreamCapture {
     private let queue: DispatchQueue
     private var stream: CGDisplayStream?
 
-    init(service: TBDisplaySenderService, queue: DispatchQueue) {
+    init(service: TBDisplaySenderSession, queue: DispatchQueue) {
         self.serviceRef = Unmanaged.passUnretained(service).toOpaque()
         self.queue = queue
     }
@@ -295,7 +295,7 @@ private final class TBDirectDisplayStreamCapture {
                       let surfaceRef = UnsafeRawPointer(bitPattern: surfaceRefValue) else {
                     return
                 }
-                let service = Unmanaged<TBDisplaySenderService>.fromOpaque(serviceRef).takeUnretainedValue()
+                let service = Unmanaged<TBDisplaySenderSession>.fromOpaque(serviceRef).takeUnretainedValue()
                 let surface = Unmanaged<IOSurface>.fromOpaque(surfaceRef).takeRetainedValue()
                 MainActor.assumeIsolated {
                     service.encodeDisplaySurface(surface, displayTime: displayTime)
@@ -318,32 +318,40 @@ private final class TBDirectDisplayStreamCapture {
 }
 
 @MainActor
-final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Sendable {
-    static let shared = TBDisplaySenderService()
-    private override init() { super.init() }
+final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @unchecked Sendable {
+    let id = UUID()
+
+    init(language: TBDisplaySenderLanguage, largeCursor: Bool) {
+        self.statusText = TBDisplaySenderStatusState.ready.text(language)
+        self.receiverPanelText = TBDisplaySenderL10n.waitingReceiverProfile(language)
+        self.virtualDisplayText = TBDisplaySenderL10n.virtualDisplayNotCreated(language)
+        self.language = language
+        self.largeCursor = largeCursor
+        self.streamResolutionText = TBDisplaySenderL10n.streamSummary(
+            preset: .standard1440p,
+            source: .desktopMirror,
+            language: language
+        )
+        super.init()
+    }
 
     @Published var isConnected = false
     @Published var isStreaming = false
-    @Published var statusText = TBDisplaySenderStatusState.ready.text(TBDisplaySenderLanguage.load())
-    @Published var myTBIP: String? = nil
+    @Published var statusText: String
+    @Published var localTBIP = ""
+    @Published var selectedReceiverID = ""
     @Published var receiverIP = ""
     @Published var senderFPS = 0
-    @Published var receiverPanelText = TBDisplaySenderL10n.waitingReceiverProfile(TBDisplaySenderLanguage.load())
-    @Published var virtualDisplayText = TBDisplaySenderL10n.virtualDisplayNotCreated(TBDisplaySenderLanguage.load())
+    @Published var receiverPanelText: String
+    @Published var virtualDisplayText: String
     @Published var captureDisplayText = "Capture display: n/a"
     @Published var displayStateText = "Display state: n/a"
-    @Published var language: TBDisplaySenderLanguage = .load() {
+    @Published var language: TBDisplaySenderLanguage {
         didSet {
-            language.persist()
             refreshLocalizedText()
         }
     }
-    @Published var showsMenuBarIcon = true
-    @Published var largeCursor: Bool = UserDefaults.standard.bool(forKey: "fd.tbdisplaysender.largeCursor") {
-        didSet {
-            UserDefaults.standard.set(largeCursor, forKey: "fd.tbdisplaysender.largeCursor")
-        }
-    }
+    @Published var largeCursor: Bool
     @Published var capturePreset: TBDisplayCapturePreset = .standard1440p {
         didSet {
             if !isStreaming {
@@ -358,7 +366,7 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
             }
         }
     }
-    @Published var streamResolutionText = TBDisplaySenderL10n.streamSummary(preset: .standard1440p, source: .desktopMirror, language: TBDisplaySenderLanguage.load())
+    @Published var streamResolutionText: String
 
     private var connection: NWConnection?
     private let connectionQueue = DispatchQueue(label: "fd.tbmonitor.sender.connection", qos: .userInteractive)
@@ -371,7 +379,7 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
     private var scStream: SCStream?
     private var directDisplayStream: TBDirectDisplayStreamCapture?
     private var vtEncoder: VTCompressionSession?
-    private var vtEncoderRef: Unmanaged<TBDisplaySenderService>?
+    private var vtEncoderRef: Unmanaged<TBDisplaySenderSession>?
 
     private var sentFrames = 0
     private var sentSnapshot = 0
@@ -452,10 +460,6 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
         }
     }
 
-    func refreshTBIP() {
-        myTBIP = detectLocalTBIP()
-    }
-
     private func formattedCaptureErrorMessage(for error: Error) -> String {
         let nsError = error as NSError
         let details = "\(nsError.localizedDescription) [\(nsError.domain) \(nsError.code)]"
@@ -477,7 +481,7 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
     }
 
     func connect() {
-        guard connection == nil, !receiverIP.isEmpty else { return }
+        guard connection == nil, !receiverIP.isEmpty, !localTBIP.isEmpty else { return }
         recvBuffer.removeAll(keepingCapacity: false)
         activeProfile = nil
         setStatus(.connecting(receiverIP))
@@ -487,6 +491,9 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
         let params = NWParameters(tls: nil, tcp: tcpOptions)
         params.allowLocalEndpointReuse = true
         params.serviceClass = .interactiveVideo
+        if let localPort = NWEndpoint.Port(rawValue: 0) {
+            params.requiredLocalEndpoint = .hostPort(host: NWEndpoint.Host(localTBIP), port: localPort)
+        }
         let conn = NWConnection(
             host: NWEndpoint.Host(receiverIP),
             port: NWEndpoint.Port(integerLiteral: TBMonitorProtocol.port),
@@ -1018,7 +1025,7 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
 
         let callback: VTCompressionOutputCallback = { ref, _, status, _, sampleBuffer in
             guard let ref else { return }
-            let service = Unmanaged<TBDisplaySenderService>.fromOpaque(ref).takeUnretainedValue()
+            let service = Unmanaged<TBDisplaySenderSession>.fromOpaque(ref).takeUnretainedValue()
             DispatchQueue.main.async {
                 service.inFlightEncodeFrames = max(0, service.inFlightEncodeFrames - 1)
                 guard status == noErr, let sampleBuffer else { return }
@@ -1344,32 +1351,4 @@ final class TBDisplaySenderService: NSObject, ObservableObject, @unchecked Senda
         connection?.send(content: packet, completion: .contentProcessed({ _ in }))
     }
 
-    private func detectLocalTBIP() -> String? {
-        var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0 else { return nil }
-        defer { freeifaddrs(ifaddr) }
-
-        var pointer = ifaddr
-        while let iface = pointer {
-            defer { pointer = iface.pointee.ifa_next }
-            guard let sa = iface.pointee.ifa_addr,
-                  sa.pointee.sa_family == UInt8(AF_INET)
-            else { continue }
-            let name = String(cString: iface.pointee.ifa_name)
-            guard name.hasPrefix("bridge") else { continue }
-            var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-            guard getnameinfo(
-                sa,
-                socklen_t(sa.pointee.sa_len),
-                &buffer,
-                socklen_t(buffer.count),
-                nil,
-                0,
-                NI_NUMERICHOST
-            ) == 0 else { continue }
-            let ip = String(cString: buffer)
-            if ip.hasPrefix("169.254.") { return ip }
-        }
-        return nil
-    }
 }

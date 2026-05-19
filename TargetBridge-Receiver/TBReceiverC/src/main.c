@@ -19,6 +19,7 @@
 #include "proto.h"
 
 #include <SDL.h>
+#include <dns_sd.h>
 
 #include <errno.h>
 #include <signal.h>
@@ -49,6 +50,9 @@ struct app {
     char     sender_text[128];
     char     panel_text[128];
     char     mode_text[128];
+
+    DNSServiceRef bonjour_ref;
+    char     bonjour_name[128];
 };
 
 static volatile sig_atomic_t g_term = 0;
@@ -58,6 +62,74 @@ static uint64_t now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
+}
+
+static void bonjour_deinit(struct app *a) {
+    if (a->bonjour_ref) {
+        DNSServiceRefDeallocate(a->bonjour_ref);
+        a->bonjour_ref = NULL;
+    }
+}
+
+static void on_bonjour_register(DNSServiceRef sdRef,
+                                DNSServiceFlags flags,
+                                DNSServiceErrorType errorCode,
+                                const char *name,
+                                const char *regtype,
+                                const char *domain,
+                                void *context) {
+    (void)sdRef;
+    (void)flags;
+    (void)context;
+    if (errorCode == kDNSServiceErr_NoError) {
+        fprintf(stderr, "[bonjour] published %s.%s%s\n", name ? name : "TargetBridge Receiver", regtype ? regtype : "", domain ? domain : "");
+    } else {
+        fprintf(stderr, "[bonjour] register failed: %d\n", (int)errorCode);
+    }
+}
+
+static void bonjour_update(struct app *a, uint16_t port) {
+    bonjour_deinit(a);
+
+    if (a->ip_text[0] == '\0' || strcmp(a->ip_text, "not detected") == 0) return;
+
+    TXTRecordRef txt;
+    TXTRecordCreate(&txt, 0, NULL);
+    TXTRecordSetValue(&txt, "name", (uint8_t)strlen(a->bonjour_name), a->bonjour_name);
+    TXTRecordSetValue(&txt, "ip", (uint8_t)strlen(a->ip_text), a->ip_text);
+    TXTRecordSetValue(&txt, "panel", (uint8_t)strlen(a->panel_text), a->panel_text);
+    TXTRecordSetValue(&txt, "version", (uint8_t)strlen(TB_RECEIVER_VERSION), TB_RECEIVER_VERSION);
+
+    struct tb_display_info info;
+    if (tb_disp_get_info(a->disp, &info) == 0) {
+        char panel_w[16];
+        char panel_h[16];
+        snprintf(panel_w, sizeof(panel_w), "%u", info.active_w);
+        snprintf(panel_h, sizeof(panel_h), "%u", info.active_h);
+        TXTRecordSetValue(&txt, "panelWidth", (uint8_t)strlen(panel_w), panel_w);
+        TXTRecordSetValue(&txt, "panelHeight", (uint8_t)strlen(panel_h), panel_h);
+    }
+
+    DNSServiceErrorType err = DNSServiceRegister(
+        &a->bonjour_ref,
+        0,
+        0,
+        a->bonjour_name,
+        "_targetbridge._tcp",
+        "local.",
+        NULL,
+        htons(port),
+        TXTRecordGetLength(&txt),
+        TXTRecordGetBytesPtr(&txt),
+        on_bonjour_register,
+        a
+    );
+    TXTRecordDeallocate(&txt);
+
+    if (err != kDNSServiceErr_NoError) {
+        fprintf(stderr, "[bonjour] unable to publish receiver service: %d\n", (int)err);
+        bonjour_deinit(a);
+    }
 }
 
 static void extract_json_string_field(const uint8_t *payload,
@@ -372,6 +444,13 @@ int main(int argc, char **argv) {
     memset(&a, 0, sizeof(a));
     a.server_fd = -1;
     a.client_fd = -1;
+    {
+        char host[96] = {0};
+        if (gethostname(host, sizeof(host)) != 0 || host[0] == '\0') {
+            snprintf(host, sizeof(host), "%s", "Receiver");
+        }
+        snprintf(a.bonjour_name, sizeof(a.bonjour_name), "TargetBridge %s", host);
+    }
     snprintf(a.ip_text, sizeof(a.ip_text), "%s", ip[0] ? ip : "not detected");
     snprintf(a.status_text, sizeof(a.status_text), "%s", "waiting for sender");
     snprintf(a.sender_text, sizeof(a.sender_text), "%s", "waiting");
@@ -387,6 +466,7 @@ int main(int argc, char **argv) {
     } else {
         snprintf(a.panel_text, sizeof(a.panel_text), "%s", "5K display");
     }
+    bonjour_update(&a, TB_PORT);
 
     a.dec = tb_dec_create(on_frame, &a);
     if (!a.dec) { fprintf(stderr, "tb_dec_create failed\n"); tb_disp_destroy(a.disp); return 1; }
@@ -410,6 +490,7 @@ int main(int argc, char **argv) {
                 strcmp(a.ip_text, refreshed_ip) != 0) {
                 snprintf(a.ip_text, sizeof(a.ip_text), "%s", refreshed_ip);
                 fprintf(stderr, "[main] Thunderbolt Bridge IP = %s\n", refreshed_ip);
+                bonjour_update(&a, TB_PORT);
             }
         }
 
@@ -450,6 +531,7 @@ int main(int argc, char **argv) {
 
     if (a.client_fd >= 0) close(a.client_fd);
     if (a.server_fd >= 0) close(a.server_fd);
+    bonjour_deinit(&a);
     tb_parser_free(&a.parser);
     tb_dec_destroy(a.dec);
     tb_disp_destroy(a.disp);
