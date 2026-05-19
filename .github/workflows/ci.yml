@@ -12,7 +12,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Tools
         run: |
@@ -38,11 +38,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Dependencies
         run: |
-          brew install ffmpeg sdl2 pkg-config dylibbundler
+          brew install ffmpeg sdl2 dylibbundler
 
       - name: Ensure Desktop Directory Exists
         run: mkdir -p ~/Desktop
