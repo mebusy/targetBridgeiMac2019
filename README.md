@@ -26,17 +26,20 @@ If you want the current stable packaged version, use the latest release. If you 
 
 ## Screenshots
 
-**Sender (Apple Silicon Mac) — waiting for connection:**
-![TargetBridge Sender](images/sender-idle.png)
+**Sender (Apple Silicon Mac) — multi-session dashboard:**
+![TargetBridge Sender](images/sender-multisession.png)
 
-**Sender — active stream (5K, HEVC):**
-![TargetBridge Sender active](images/sender-active.png)
+**Sender — active mirrored stream (5K, HEVC):**
+![TargetBridge Sender active](images/sender-active-mirror.png)
 
 **Receiver (Intel iMac) — waiting for sender:**
 ![TargetBridge Receiver](images/receiver.png)
 
-**iMac connected at native resolution via Thunderbolt:**
-![TargetBridge native resolution](images/resolution_linked_thunderbolt.png)
+**macOS Displays — extended desktop target:**
+![TargetBridge extended desktop](images/display-extend.png)
+
+**macOS Displays — mirrored desktop target:**
+![TargetBridge mirrored desktop](images/display-mirror.png)
 
 ## Download
 
