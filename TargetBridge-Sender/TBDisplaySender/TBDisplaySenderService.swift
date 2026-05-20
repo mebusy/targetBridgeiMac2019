@@ -997,8 +997,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
             startFPSTimer()
             return true
         } catch {
-            if error.localizedDescription.hasPrefix("nessun SCDisplay") ||
-                error.localizedDescription.hasPrefix("virtual display") {
+            if error.localizedDescription.hasPrefix("no virtual SCDisplay available") {
                 setStatus(.noShareableDisplay(error.localizedDescription))
             } else {
                 setStatus(.captureDesktopError(formattedCaptureErrorMessage(for: error)))
@@ -1082,7 +1081,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         let baselineIDs = baselineDisplayIDs.map(String.init).sorted().joined(separator: ", ")
         let onlineIDs = onlineDisplayIDs().map(String.init).sorted().joined(separator: ", ")
         throw DisplayLookupError.notFound(
-            details: "nessun SCDisplay virtuale disponibile (target=\(targetDisplayID), baseline=[\(baselineIDs)], disponibili=[\(availableIDs)], online=[\(onlineIDs)])"
+            details: "no virtual SCDisplay available (target=\(targetDisplayID), baseline=[\(baselineIDs)], available=[\(availableIDs)], online=[\(onlineIDs)])"
         )
     }
 
