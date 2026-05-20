@@ -10,19 +10,19 @@ If TargetBridge is useful to you, a ⭐ on GitHub helps others find it.
 
 Apple dropped Target Display Mode in 2014 with the 5K iMac — and it never came back. TargetBridge brings it back via software, streaming your screen to the iMac at up to 5K over a direct Thunderbolt cable.
 
-## Branch status
+## Release status
 
-The latest stable public release is still **v1.3.0**.
+The latest packaged public release is still **v1.3.0**.
 
-This branch, `feature/multi-imac-direct`, contains additional in-progress work that is not part of the latest release yet:
+The current repository also contains the upcoming direct multi-iMac work planned for the next release, including:
 
-- direct multi-iMac sender support with multiple simultaneous sessions
+- multiple simultaneous direct receiver sessions from one sender
 - automatic receiver discovery via Bonjour
-- remembered extended-display arrangement for the same receiver
+- remembered extended-display arrangement per receiver
 - repo-local build outputs under `build/`
 - receiver build target lowered to **macOS 11+** for Intel testing
 
-If you just want the stable public version, use the latest release. If you want to test the upcoming direct multi-iMac work, build from this branch.
+If you want the current stable packaged version, use the latest release. If you want the newest in-repo functionality before the next release is cut, build from source.
 
 ## Screenshots
 
@@ -47,7 +47,7 @@ If you just want the stable public version, use the latest release. If you want 
 
 Unzip and double-click. On first launch, grant Screen Recording permission to the sender.
 
-If you are testing the current development branch instead of the latest release, build outputs now go into:
+If you build from source, app outputs go into:
 
 - `build/TargetBridge.app`
 - `build/TargetBridge Receiver.app`
@@ -76,22 +76,22 @@ If you are testing the current development branch instead of the latest release,
 
 The sender can stream either an extended virtual display or a mirror of the sender display.
 
-## Direct multi-iMac preview
+## Direct multi-iMac support
 
-This branch adds an experimental direct multi-iMac path for setups like:
+The current codebase adds a direct multi-iMac path for setups like:
 
 ```text
 iMac1 <--TB-- MacBook --TB--> iMac2
 ```
 
-Current branch behavior:
+Current behavior:
 
 - one sender app can manage multiple receiver sessions
 - each session can bind to its own Thunderbolt Bridge interface
 - discovered receivers can be selected from the UI instead of typing the IP manually
 - the main target is `extended + extended`; multi-session mirror mode still needs more testing
 
-This is branch-only work for now and should be considered preview / test functionality until it lands in a stable release.
+This is the basis for the next release and should still be considered pre-release functionality until a new packaged version is published.
 
 ## Extended Desktop
 
@@ -109,4 +109,4 @@ If the receiver does not fill the iMac panel or the cursor/desktop feels scaled 
 - Italian: `docs/QuickStart-IT.md`
 - English: `docs/QuickStart-EN.md`
 
-When testing this branch, the sender can also discover compatible receivers automatically in the UI and prefill their Thunderbolt Bridge IP.
+When building from source, the sender can also discover compatible receivers automatically in the UI and prefill their Thunderbolt Bridge IP.
