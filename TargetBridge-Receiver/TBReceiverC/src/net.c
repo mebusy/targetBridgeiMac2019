@@ -49,7 +49,7 @@ static uint32_t read_be32(const uint8_t *p) {
 }
 
 int tb_parser_feed(struct tb_parser *p, const uint8_t *data, size_t n) {
-    if (parser_reserve(p, p->len + n) < 0) return -1;
+    if (parser_reserve(p, p->len + n + 1) < 0) return -1;  /* +1 for NUL sentinel */
     memcpy(p->buf + p->len, data, n);
     p->len += n;
 
@@ -65,7 +65,17 @@ int tb_parser_feed(struct tb_parser *p, const uint8_t *data, size_t n) {
         uint8_t        type    = p->buf[off + 4];
         const uint8_t *payload = p->buf + off + 5;
         size_t         plen    = pkt_len - 1;
+        /* Write a NUL sentinel one byte past the payload so that string
+         * functions in the callback (strstr, strchr, strtol, …) cannot
+         * read beyond the packet boundary.  The +1 reservation above
+         * guarantees this byte is always within the allocated buffer.
+         * Save and restore the byte so a following packet's header is
+         * not corrupted when two packets are contiguous in the buffer. */
+        uint8_t       *sentinel = (uint8_t *)(payload + plen);
+        uint8_t        saved    = *sentinel;
+        *sentinel = '\0';
         p->cb(type, payload, plen, p->ud);
+        *sentinel = saved;
         off += 4 + pkt_len;
     }
 

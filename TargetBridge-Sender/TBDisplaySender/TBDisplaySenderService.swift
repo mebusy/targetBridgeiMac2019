@@ -319,6 +319,7 @@ private final class TBDirectDisplayStreamCapture {
 
 @MainActor
 final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @unchecked Sendable {
+    private static let receiverIPDefaultsKey = "fd.tbdisplaysender.receiverIP"
     let id = UUID()
 
     init(language: TBDisplaySenderLanguage, largeCursor: Bool) {
@@ -340,7 +341,14 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
     @Published var statusText: String
     @Published var localTBIP = ""
     @Published var selectedReceiverID = ""
-    @Published var receiverIP = ""
+    @Published var isCableTesting = false
+    @Published var cableTestResult: Double? = nil
+    private var isCableTestConnection = false
+    @Published var receiverIP: String = UserDefaults.standard.string(forKey: receiverIPDefaultsKey) ?? "" {
+        didSet {
+            UserDefaults.standard.set(receiverIP, forKey: Self.receiverIPDefaultsKey)
+        }
+    }
     @Published var senderFPS = 0
     @Published var receiverPanelText: String
     @Published var virtualDisplayText: String
@@ -525,6 +533,124 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         conn.start(queue: connectionQueue)
     }
 
+    func startCableTest() {
+        guard !isCableTesting, !isConnected, !receiverIP.isEmpty else { return }
+        isCableTesting = true
+        cableTestResult = nil
+        isCableTestConnection = true
+        connect()
+    }
+
+    private func performCableTest() async throws -> Double {
+        guard let conn = connection else {
+            throw NSError(domain: "TBDisplaySenderService", code: -1, userInfo: [NSLocalizedDescriptionKey: "No connection"])
+        }
+
+        let totalBytes: Int64 = 20 * 1000 * 1000 * 1000
+        let chunkSize = 4 * 1000 * 1000
+        let totalChunks = Int(totalBytes / Int64(chunkSize))
+
+        // Pre-allocate the single test packet to avoid memory overhead
+        var packet = Data()
+        TBMonitorProtocol.appendBE32(&packet, UInt32(1 + chunkSize))
+        packet.append(TBMonitorPacketType.testData.rawValue)
+        packet.append(Data(repeating: 0, count: chunkSize))
+
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let startTime = DispatchTime.now()
+                let condition = NSCondition()
+
+                let lock = NSLock()
+                var sendError: Error?
+                var resumed = false
+                var inFlightCount = 0
+
+                func finish(with error: Error?) {
+                    lock.lock()
+                    defer { lock.unlock() }
+                    guard !resumed else { return }
+                    resumed = true
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        let endTime = DispatchTime.now()
+                        let nanoTime = endTime.uptimeNanoseconds - startTime.uptimeNanoseconds
+                        let timeInSeconds = Double(nanoTime) / 1_000_000_000.0
+
+                        // 20 GB = 20,000,000,000 bytes = 160,000,000,000 bits
+                        // Decimal Gigabits = bits / 1,000,000,000
+                        let totalBits = Double(totalBytes) * 8.0
+                        let rate = totalBits / 1_000_000_000.0 / timeInSeconds
+                        continuation.resume(returning: rate)
+                    }
+                }
+
+                for _ in 0..<totalChunks {
+                    lock.lock()
+                    let err = sendError
+                    lock.unlock()
+                    if err != nil {
+                        break
+                    }
+
+                    condition.lock()
+                    while inFlightCount >= 8 {
+                        lock.lock()
+                        let errCheck = sendError
+                        lock.unlock()
+                        if errCheck != nil {
+                            break
+                        }
+                        condition.wait()
+                    }
+
+                    lock.lock()
+                    let errCheck2 = sendError
+                    lock.unlock()
+                    if errCheck2 != nil {
+                        condition.unlock()
+                        break
+                    }
+
+                    inFlightCount += 1
+                    condition.unlock()
+
+                    conn.send(content: packet, completion: .contentProcessed({ error in
+                        if let error = error {
+                            lock.lock()
+                            if sendError == nil {
+                                sendError = error
+                            }
+                            lock.unlock()
+                        }
+
+                        condition.lock()
+                        inFlightCount -= 1
+                        condition.broadcast()
+                        condition.unlock()
+                    }))
+                }
+
+                // Wait for all outstanding packets to complete (up to 3 seconds)
+                let limitDate = Date().addingTimeInterval(3.0)
+                condition.lock()
+                while inFlightCount > 0 {
+                    if !condition.wait(until: limitDate) {
+                        break // Timed out
+                    }
+                }
+                condition.unlock()
+
+                lock.lock()
+                let err = sendError
+                lock.unlock()
+
+                finish(with: err)
+            }
+        }
+    }
+
     func stop() {
         stop(resetStatusTo: .stopped)
     }
@@ -569,6 +695,8 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         activeProfile = nil
         isConnected = false
         isStreaming = false
+        isCableTesting = false
+        isCableTestConnection = false
         if let status {
             setStatus(status)
         }
@@ -671,6 +799,22 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         receiverPanelText = TBDisplaySenderL10n.receiverSummary(profile, language: language)
 
         Task { @MainActor in
+            if self.isCableTestConnection {
+                self.setStatus(.testingCable)
+                do {
+                    let rate = try await self.performCableTest()
+                    self.cableTestResult = rate
+                } catch {
+                    NSLog("TargetBridge: cable test failed: \(error)")
+                    self.stop(resetStatusTo: .connectionFailed(error.localizedDescription))
+                    return
+                }
+                self.isCableTestConnection = false
+                self.isCableTesting = false
+                self.stop(resetStatusTo: .stopped)
+                return
+            }
+
             self.setStatus(.creatingVirtualDisplay)
             self.baselineDisplayIDs = await self.fetchShareableDisplayIDs()
             guard self.session.create(

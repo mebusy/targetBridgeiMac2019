@@ -8,6 +8,7 @@ struct TBDisplaySenderApp: App {
     var body: some Scene {
         WindowGroup("TargetBridge", id: "main") {
             TBDisplaySenderContentView(service: service)
+                .frame(minWidth: 540)
                 .task {
                     statusItemController.activate()
                 }

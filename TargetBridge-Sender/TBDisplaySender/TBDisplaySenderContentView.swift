@@ -152,6 +152,20 @@ private struct TBDisplaySenderSessionCard: View {
                     }
                     .disabled(!session.isConnected && (trimmedReceiverIP.isEmpty || session.localTBIP.isEmpty))
 
+                    Button(action: {
+                        session.startCableTest()
+                    }) {
+                        HStack(spacing: 4) {
+                            if session.isCableTesting {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .controlSize(.small)
+                            }
+                            Text(session.isCableTesting ? TBDisplaySenderL10n.testingButton(service.language) : TBDisplaySenderL10n.cableTestButton(service.language))
+                        }
+                    }
+                    .disabled(session.isConnected || session.isStreaming || session.isCableTesting || trimmedReceiverIP.isEmpty || session.localTBIP.isEmpty)
+
                     Button(TBDisplaySenderL10n.removeSessionButton(service.language)) {
                         service.removeSession(session)
                     }
@@ -187,6 +201,22 @@ private struct TBDisplaySenderSessionCard: View {
                     Text(TBDisplaySenderL10n.discoveryHint(service.language))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+
+                GroupBox(TBDisplaySenderL10n.cableTestGroup(service.language)) {
+                    HStack {
+                        Text(TBDisplaySenderL10n.transferRateLabel(service.language))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if let rate = session.cableTestResult {
+                            Text(String(format: "%.2f Gbits/s", rate))
+                                .font(.system(.body, design: .monospaced).bold())
+                                .foregroundStyle(.green)
+                        } else {
+                            Text(TBDisplaySenderL10n.noTestResult(service.language))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
 
                 Divider()
