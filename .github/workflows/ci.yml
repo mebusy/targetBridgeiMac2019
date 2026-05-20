@@ -39,7 +39,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          brew install ffmpeg sdl2 pkgconf dylibbundler
+          brew install ffmpeg sdl2 dylibbundler
 
       - name: Build Receiver App
         run: |
