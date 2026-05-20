@@ -1123,6 +1123,8 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         Task { @MainActor [weak self] in
             guard let self else { return }
 
+            var hasAppliedArrangement = false
+
             for attempt in 1...12 {
                 try? await Task.sleep(nanoseconds: 500_000_000)
 
@@ -1131,12 +1133,19 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
                       self.activeProfile != nil
                 else { return }
 
-                if CGDisplayIsInMirrorSet(virtualDisplayID) == 0 {
+                // A newly recreated virtual display can already be outside a mirror set
+                // while still sitting at macOS's default placement on the right.
+                // Force at least one explicit extended-desktop configuration pass so
+                // we can reapply the saved arrangement for this receiver.
+                if CGDisplayIsInMirrorSet(virtualDisplayID) == 0 && hasAppliedArrangement {
                     self.displayStateText = self.describeDisplayState(for: virtualDisplayID)
                     return
                 }
 
                 let configured = self.configureExtendedDesktop(for: virtualDisplayID)
+                if configured {
+                    hasAppliedArrangement = true
+                }
                 self.displayStateText = self.describeDisplayState(for: virtualDisplayID)
                 NSLog(
                     "TargetBridge: extended desktop recovery attempt %d for %u configured=%d state=%@",
@@ -1146,7 +1155,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
                     self.displayStateText
                 )
 
-                if configured || CGDisplayIsInMirrorSet(virtualDisplayID) == 0 {
+                if configured || (CGDisplayIsInMirrorSet(virtualDisplayID) == 0 && hasAppliedArrangement) {
                     return
                 }
             }
