@@ -49,7 +49,6 @@ Mini-DisplayPort-style connectors. If you want to connect a newer Mac to one of
 these, you will need an adapter:
 
 - Apple Thunderbolt 3 (USB-C) to Thunderbolt 2 Adapter, Model MYH93AM/A / MMEL2AM/A.
-  This adapter fits into a TB3 port and accepts a TB2 cable. With Macs, you can
-  also use this with a TB4 port, but NOT with a TB5 port.
+  This adapter fits into a TB3 port and accepts a TB2 cable. With Macs, you can also use this with a TB4 or TB5 port.
 
 Note: Generic USB C to Mini DisplayPort adapters will not work. They lack the required circuitry to pass through Thunderbolt data. You must use an adapter that explicitly supports Thunderbolt, not just DisplayPort.
