@@ -4,6 +4,7 @@ enum TBMonitorPacketType: UInt8 {
     case helloReceiver = 0x10
     case displayProfile = 0x11
     case createSessionAck = 0x12
+    case uiLanguage = 0x13
     case paramSets = 0x20
     case frame = 0x21
     case heartbeat = 0x30
@@ -14,6 +15,7 @@ enum TBMonitorPacketType: UInt8 {
 
 struct TBMonitorHelloReceiver: Codable {
     var senderName: String
+    var uiLanguage: String?
     var capturePreset: String?
     var captureSource: String?
     var captureWidth: Int?
@@ -37,6 +39,10 @@ struct TBMonitorCreateSessionAck: Codable {
     var accepted: Bool
     var displayName: String
     var displayID: UInt32
+}
+
+struct TBMonitorUILanguageUpdate: Codable {
+    var uiLanguage: String
 }
 
 struct TBMonitorHeartbeat: Codable {

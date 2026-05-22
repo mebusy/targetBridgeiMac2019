@@ -16,6 +16,9 @@ targets:
       - path: TBDisplayShared
         excludes:
           - "**/*.md"
+      - path: ../TargetBridge-Shared
+        excludes:
+          - "**/*.md"
       - path: TargetBridgeSupport/Assets.xcassets
     settings:
       base:

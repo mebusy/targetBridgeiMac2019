@@ -17,16 +17,19 @@
 #include "decoder.h"
 #include "display.h"
 #include "proto.h"
+#include "tb_i18n.h"
 
 #include <SDL.h>
 #include <dns_sd.h>
 
 #include <errno.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -50,6 +53,9 @@ struct app {
     char     sender_text[128];
     char     panel_text[128];
     char     mode_text[128];
+    char     language_pref[8];
+    char     language_text[96];
+    char     sender_ui_language[8];
 
     DNSServiceRef bonjour_ref;
     char     bonjour_name[128];
@@ -62,6 +68,220 @@ static uint64_t now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
+}
+
+static void tb_copy_i18n(char *dest, size_t size, const char *key);
+static void tb_format_i18n(char *dest,
+                           size_t size,
+                           const char *key,
+                           const struct tb_i18n_pair *pairs,
+                           size_t pair_count);
+static void tb_set_receiver_mode_requested(char *dest,
+                                           size_t size,
+                                           int width,
+                                           int height,
+                                           const char *source,
+                                           const char *preset,
+                                           const char *codec);
+static void tb_refresh_idle_localized_strings(struct app *a);
+static void tb_receiver_load_language_preference(char *dest, size_t size);
+static void tb_receiver_save_language_preference(const char *language_pref);
+static void tb_receiver_apply_language_preference(struct app *a);
+static void tb_receiver_cycle_language_preference(struct app *a);
+static void tb_receiver_refresh_language_text(struct app *a);
+
+static int tb_receiver_is_valid_language_pref(const char *language_pref) {
+    return language_pref &&
+           (strcmp(language_pref, "auto") == 0 ||
+            strcmp(language_pref, "it") == 0 ||
+            strcmp(language_pref, "en") == 0 ||
+            strcmp(language_pref, "de") == 0 ||
+            strcmp(language_pref, "zh") == 0);
+}
+
+static void tb_receiver_settings_path(char *dest, size_t size) {
+    const char *home = getenv("HOME");
+    if (!dest || size == 0) return;
+    dest[0] = '\0';
+    if (!home || !*home) return;
+    snprintf(dest, size, "%s/Library/Application Support/TargetBridge Receiver/settings.json", home);
+}
+
+static void tb_receiver_ensure_settings_dir(void) {
+    const char *home = getenv("HOME");
+    if (!home || !*home) return;
+
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), "%s/Library", home);
+    mkdir(path, 0755);
+    snprintf(path, sizeof(path), "%s/Library/Application Support", home);
+    mkdir(path, 0755);
+    snprintf(path, sizeof(path), "%s/Library/Application Support/TargetBridge Receiver", home);
+    mkdir(path, 0755);
+}
+
+static void tb_receiver_load_language_preference(char *dest, size_t size) {
+    if (!dest || size == 0) return;
+    snprintf(dest, size, "%s", "auto");
+
+    char path[PATH_MAX];
+    tb_receiver_settings_path(path, sizeof(path));
+    if (!path[0]) return;
+
+    FILE *fp = fopen(path, "rb");
+    if (!fp) return;
+
+    char buf[256];
+    size_t n = fread(buf, 1, sizeof(buf) - 1, fp);
+    fclose(fp);
+    buf[n] = '\0';
+
+    const char *pos = strstr(buf, "\"language\"");
+    if (!pos) return;
+    pos = strchr(pos, ':');
+    if (!pos) return;
+    pos = strchr(pos, '"');
+    if (!pos) return;
+    pos++;
+
+    char code[8];
+    size_t i = 0;
+    while (*pos && *pos != '"' && i + 1 < sizeof(code)) code[i++] = *pos++;
+    code[i] = '\0';
+
+    if (tb_receiver_is_valid_language_pref(code)) {
+        snprintf(dest, size, "%s", code);
+    }
+}
+
+static void tb_receiver_save_language_preference(const char *language_pref) {
+    if (!tb_receiver_is_valid_language_pref(language_pref)) return;
+    tb_receiver_ensure_settings_dir();
+
+    char path[PATH_MAX];
+    tb_receiver_settings_path(path, sizeof(path));
+    if (!path[0]) return;
+
+    FILE *fp = fopen(path, "wb");
+    if (!fp) return;
+    fprintf(fp, "{\n  \"language\": \"%s\"\n}\n", language_pref);
+    fclose(fp);
+}
+
+static const char *tb_receiver_language_display_name(const char *language_code) {
+    if (!language_code || !*language_code) language_code = "en";
+    if (strcmp(language_code, "it") == 0) return tb_i18n_get("common.language.italian");
+    if (strcmp(language_code, "de") == 0) return tb_i18n_get("common.language.german");
+    if (strcmp(language_code, "zh") == 0) return tb_i18n_get("common.language.chinese");
+    return tb_i18n_get("common.language.english");
+}
+
+static void tb_receiver_refresh_language_text(struct app *a) {
+    if (!a) return;
+    if (strcmp(a->language_pref, "auto") == 0) {
+        snprintf(a->language_text,
+                 sizeof(a->language_text),
+                 "%s · %s",
+                 tb_i18n_get("receiver.language.auto"),
+                 tb_receiver_language_display_name(tb_i18n_current_language()));
+    } else {
+        snprintf(a->language_text,
+                 sizeof(a->language_text),
+                 "%s",
+                 tb_receiver_language_display_name(a->language_pref));
+    }
+}
+
+static void tb_receiver_apply_language_preference(struct app *a) {
+    if (!a) return;
+
+    if (strcmp(a->language_pref, "auto") == 0) {
+        if (a->sender_ui_language[0] != '\0') {
+            tb_i18n_set_runtime_language(a->sender_ui_language);
+        } else {
+            tb_i18n_set_runtime_language("auto");
+        }
+    } else {
+        tb_i18n_set_runtime_language(a->language_pref);
+    }
+
+    tb_refresh_idle_localized_strings(a);
+    tb_receiver_refresh_language_text(a);
+}
+
+static void tb_receiver_cycle_language_preference(struct app *a) {
+    if (!a) return;
+
+    if (strcmp(a->language_pref, "auto") == 0) {
+        snprintf(a->language_pref, sizeof(a->language_pref), "%s", "it");
+    } else if (strcmp(a->language_pref, "it") == 0) {
+        snprintf(a->language_pref, sizeof(a->language_pref), "%s", "en");
+    } else if (strcmp(a->language_pref, "en") == 0) {
+        snprintf(a->language_pref, sizeof(a->language_pref), "%s", "de");
+    } else if (strcmp(a->language_pref, "de") == 0) {
+        snprintf(a->language_pref, sizeof(a->language_pref), "%s", "zh");
+    } else {
+        snprintf(a->language_pref, sizeof(a->language_pref), "%s", "auto");
+    }
+
+    tb_receiver_save_language_preference(a->language_pref);
+    tb_receiver_apply_language_preference(a);
+}
+
+static void tb_refresh_idle_localized_strings(struct app *a) {
+    if (!a) return;
+    tb_copy_i18n(a->status_text, sizeof(a->status_text), "receiver.status.waiting_for_sender");
+    tb_copy_i18n(a->sender_text, sizeof(a->sender_text), "receiver.status.waiting");
+    tb_copy_i18n(a->mode_text, sizeof(a->mode_text), "receiver.mode.default");
+    if (a->ip_text[0] == '\0') {
+        tb_copy_i18n(a->ip_text, sizeof(a->ip_text), "receiver.network.not_detected");
+    }
+}
+
+static void tb_copy_i18n(char *dest, size_t size, const char *key) {
+    if (!dest || size == 0) return;
+    snprintf(dest, size, "%s", tb_i18n_get(key));
+}
+
+static void tb_format_i18n(char *dest,
+                           size_t size,
+                           const char *key,
+                           const struct tb_i18n_pair *pairs,
+                           size_t pair_count) {
+    tb_i18n_format(dest, size, key, pairs, pair_count);
+}
+
+static void tb_set_receiver_mode_requested(char *dest,
+                                           size_t size,
+                                           int width,
+                                           int height,
+                                           const char *source,
+                                           const char *preset,
+                                           const char *codec) {
+    char width_text[16];
+    char height_text[16];
+    snprintf(width_text, sizeof(width_text), "%d", width);
+    snprintf(height_text, sizeof(height_text), "%d", height);
+
+    struct tb_i18n_pair pairs[] = {
+        { "width", width_text },
+        { "height", height_text },
+        { "source", source ? source : "" },
+        { "preset", preset ? preset : "" },
+        { "codec", codec ? codec : "" }
+    };
+
+    if (width > 0 && height > 0 && source && *source && preset && *preset && codec && *codec) {
+        tb_format_i18n(dest, size, "receiver.mode.requested_source_preset_codec", pairs, 5);
+    } else if (width > 0 && height > 0 && preset && *preset && codec && *codec) {
+        tb_format_i18n(dest, size, "receiver.mode.requested_preset_codec", pairs, 5);
+    } else if (width > 0 && height > 0 && preset && *preset) {
+        tb_format_i18n(dest, size, "receiver.mode.requested_preset", pairs, 5);
+    } else if (width > 0 && height > 0 && codec && *codec) {
+        tb_format_i18n(dest, size, "receiver.mode.requested_codec", pairs, 5);
+    } else if (width > 0 && height > 0) {
+        tb_format_i18n(dest, size, "receiver.mode.requested", pairs, 5);
+    }
 }
 
 static void bonjour_deinit(struct app *a) {
@@ -91,7 +311,7 @@ static void on_bonjour_register(DNSServiceRef sdRef,
 static void bonjour_update(struct app *a, uint16_t port) {
     bonjour_deinit(a);
 
-    if (a->ip_text[0] == '\0' || strcmp(a->ip_text, "not detected") == 0) return;
+    if (a->ip_text[0] == '\0' || strcmp(a->ip_text, tb_i18n_get("receiver.network.not_detected")) == 0) return;
 
     TXTRecordRef txt;
     TXTRecordCreate(&txt, 0, NULL);
@@ -215,8 +435,18 @@ static void on_frame(const uint8_t *y, int y_stride,
                      int w, int h, void *ud) {
     struct app *a = (struct app *)ud;
     a->have_video_frame = 1;
-    snprintf(a->status_text, sizeof(a->status_text), "%s", "stream active");
-    snprintf(a->mode_text, sizeof(a->mode_text), "%d x %d px receiving", w, h);
+    tb_copy_i18n(a->status_text, sizeof(a->status_text), "receiver.status.stream_active");
+    {
+        char width_text[16];
+        char height_text[16];
+        struct tb_i18n_pair pairs[] = {
+            { "width", width_text },
+            { "height", height_text }
+        };
+        snprintf(width_text, sizeof(width_text), "%d", w);
+        snprintf(height_text, sizeof(height_text), "%d", h);
+        tb_format_i18n(a->mode_text, sizeof(a->mode_text), "receiver.mode.receiving", pairs, 2);
+    }
     tb_disp_render_nv12(a->disp, y, y_stride, uv, uv_stride, w, h);
     a->frames++;
 }
@@ -226,10 +456,37 @@ static void on_frame(const uint8_t *y, int y_stride,
 static void on_packet(uint8_t type, const uint8_t *payload, size_t len, void *ud) {
     struct app *a = (struct app *)ud;
     switch (type) {
+    case TB_PKT_UI_LANGUAGE:
+        {
+            char ui_language[16];
+            ui_language[0] = '\0';
+            extract_json_string_field(payload, len, "\"uiLanguage\"", ui_language, sizeof(ui_language));
+            if (ui_language[0] != '\0') {
+                snprintf(a->sender_ui_language, sizeof(a->sender_ui_language), "%s", ui_language);
+                if (strcmp(a->language_pref, "auto") == 0) {
+                    tb_i18n_set_runtime_language(ui_language);
+                }
+                if (a->client_fd < 0 || !a->have_video_frame) {
+                    tb_refresh_idle_localized_strings(a);
+                }
+            }
+        }
+        break;
     case TB_PKT_HELLO_RECEIVER:
         extract_json_string_field(payload, len, "\"senderName\"", a->sender_text, sizeof(a->sender_text));
+        {
+            char ui_language[16];
+            ui_language[0] = '\0';
+            extract_json_string_field(payload, len, "\"uiLanguage\"", ui_language, sizeof(ui_language));
+            if (ui_language[0] != '\0') {
+                snprintf(a->sender_ui_language, sizeof(a->sender_ui_language), "%s", ui_language);
+                if (strcmp(a->language_pref, "auto") == 0) {
+                    tb_i18n_set_runtime_language(ui_language);
+                }
+            }
+        }
         if (a->sender_text[0] == '\0') {
-            snprintf(a->sender_text, sizeof(a->sender_text), "%s", "sender connected");
+            tb_copy_i18n(a->sender_text, sizeof(a->sender_text), "receiver.status.sender_connected");
         }
         {
             char preset[64];
@@ -246,24 +503,14 @@ static void on_packet(uint8_t type, const uint8_t *payload, size_t len, void *ud
             (void)extract_json_int_field(payload, len, "\"captureWidth\"", &capture_w);
             (void)extract_json_int_field(payload, len, "\"captureHeight\"", &capture_h);
 
-            if (capture_w > 0 && capture_h > 0 && source[0] != '\0' && preset[0] != '\0' && codec[0] != '\0') {
-                snprintf(a->mode_text, sizeof(a->mode_text), "%d x %d px requested (%s, %s, %s)", capture_w, capture_h, source, preset, codec);
-            } else if (capture_w > 0 && capture_h > 0 && preset[0] != '\0' && codec[0] != '\0') {
-                snprintf(a->mode_text, sizeof(a->mode_text), "%d x %d px requested (%s, %s)", capture_w, capture_h, preset, codec);
-            } else if (capture_w > 0 && capture_h > 0 && preset[0] != '\0') {
-                snprintf(a->mode_text, sizeof(a->mode_text), "%d x %d px requested (%s)", capture_w, capture_h, preset);
-            } else if (capture_w > 0 && capture_h > 0 && codec[0] != '\0') {
-                snprintf(a->mode_text, sizeof(a->mode_text), "%d x %d px requested (%s)", capture_w, capture_h, codec);
-            } else if (capture_w > 0 && capture_h > 0) {
-                snprintf(a->mode_text, sizeof(a->mode_text), "%d x %d px requested", capture_w, capture_h);
-            }
+            tb_set_receiver_mode_requested(a->mode_text, sizeof(a->mode_text), capture_w, capture_h, source, preset, codec);
         }
         fprintf(stderr, "[main] hello from sender\n");
-        snprintf(a->status_text, sizeof(a->status_text), "%s", "sender connected, profile sent");
+        tb_copy_i18n(a->status_text, sizeof(a->status_text), "receiver.status.sender_connected_profile_sent");
         break;
     case TB_PKT_CREATE_SESSION_ACK:
         fprintf(stderr, "[main] sender session ack: %.*s\n", (int)len, (const char *)payload);
-        snprintf(a->status_text, sizeof(a->status_text), "%s", "session accepted, waiting for frames");
+        tb_copy_i18n(a->status_text, sizeof(a->status_text), "receiver.status.session_accepted_waiting_frames");
         break;
     case TB_PKT_PARAM_SETS:
         /* tb_dec_set_param_sets is now a no-op if the sets are unchanged,
@@ -297,7 +544,7 @@ static void on_packet(uint8_t type, const uint8_t *payload, size_t len, void *ud
         break;
     case TB_PKT_TEARDOWN:
         fprintf(stderr, "[main] teardown requested by sender\n");
-        snprintf(a->status_text, sizeof(a->status_text), "%s", "session closed by sender");
+        tb_copy_i18n(a->status_text, sizeof(a->status_text), "receiver.status.session_closed_by_sender");
         a->close_requested = 1;
         break;
     default:
@@ -417,8 +664,7 @@ static void close_client(struct app *a) {
     a->have_video_frame = 0;
     tb_disp_set_connection_state(a->disp, 0);
     tb_disp_set_cursor(a->disp, 0, 0, 1, 1, 0, 0);
-    snprintf(a->status_text, sizeof(a->status_text), "%s", "waiting for sender");
-    snprintf(a->sender_text, sizeof(a->sender_text), "%s", "waiting");
+    tb_refresh_idle_localized_strings(a);
     tb_parser_free(&a->parser);
     tb_parser_init(&a->parser, on_packet, a);
     tb_dec_reset(a->dec);   /* fresh decoder for next session */
@@ -432,6 +678,13 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--windowed") == 0) fullscreen = 0;
     }
+
+    char startup_language_pref[8];
+    tb_receiver_load_language_preference(startup_language_pref, sizeof(startup_language_pref));
+    if (strcmp(startup_language_pref, "auto") != 0) {
+        tb_i18n_set_runtime_language(startup_language_pref);
+    }
+    (void)tb_i18n_init();
 
     signal(SIGINT,  on_sigint);
     signal(SIGTERM, on_sigint);
@@ -456,10 +709,10 @@ int main(int argc, char **argv) {
         }
         snprintf(a.bonjour_name, sizeof(a.bonjour_name), "TargetBridge %s", host);
     }
-    snprintf(a.ip_text, sizeof(a.ip_text), "%s", ip[0] ? ip : "not detected");
-    snprintf(a.status_text, sizeof(a.status_text), "%s", "waiting for sender");
-    snprintf(a.sender_text, sizeof(a.sender_text), "%s", "waiting");
-    snprintf(a.mode_text, sizeof(a.mode_text), "%s", "2560 x 1440 HiDPI on 5K display");
+    snprintf(a.ip_text, sizeof(a.ip_text), "%s", ip[0] ? ip : tb_i18n_get("receiver.network.not_detected"));
+    snprintf(a.language_pref, sizeof(a.language_pref), "%s", startup_language_pref);
+    tb_refresh_idle_localized_strings(&a);
+    tb_receiver_apply_language_preference(&a);
 
     a.disp = tb_disp_create(fullscreen);
     if (!a.disp) { fprintf(stderr, "tb_disp_create failed\n"); return 1; }
@@ -469,7 +722,7 @@ int main(int argc, char **argv) {
         snprintf(a.panel_text, sizeof(a.panel_text), "%u x %u px (%s)",
                  boot_info.active_w, boot_info.active_h, boot_info.name);
     } else {
-        snprintf(a.panel_text, sizeof(a.panel_text), "%s", "5K display");
+        tb_copy_i18n(a.panel_text, sizeof(a.panel_text), "receiver.panel.default");
     }
     bonjour_update(&a, TB_PORT);
 
@@ -484,7 +737,13 @@ int main(int argc, char **argv) {
     a.last_fps_tick_ms = now_ms();
     a.last_ip_check_ms = 0;
 
-    while (!g_term && !tb_disp_poll_quit(a.disp)) {
+    while (!g_term) {
+        unsigned int disp_actions = tb_disp_poll_actions(a.disp);
+        if (disp_actions & TB_DISP_ACTION_QUIT) break;
+        if ((disp_actions & TB_DISP_ACTION_CYCLE_LANGUAGE) && a.client_fd < 0) {
+            tb_receiver_cycle_language_preference(&a);
+        }
+
         uint64_t t = now_ms();
 
         if (t - a.last_ip_check_ms >= 1000) {
@@ -505,9 +764,9 @@ int main(int argc, char **argv) {
             if (c >= 0) {
                 a.client_fd = c;
                 a.have_video_frame = 0;
-                snprintf(a.status_text, sizeof(a.status_text), "%s", "sender connected, negotiating");
-                snprintf(a.sender_text, sizeof(a.sender_text), "%s", "identifying");
                 fprintf(stderr, "[main] client connected\n");
+                tb_parser_free(&a.parser);
+                tb_parser_init(&a.parser, on_packet, &a);
                 send_receiver_info(&a);
             }
         } else {
@@ -516,7 +775,7 @@ int main(int argc, char **argv) {
         }
 
         if (a.client_fd < 0 || !a.have_video_frame) {
-            tb_disp_render_status(a.disp, a.ip_text, a.status_text, a.sender_text, a.panel_text, a.mode_text);
+            tb_disp_render_status(a.disp, a.ip_text, a.status_text, a.sender_text, a.panel_text, a.mode_text, a.language_text);
         }
 
         /* FPS log */

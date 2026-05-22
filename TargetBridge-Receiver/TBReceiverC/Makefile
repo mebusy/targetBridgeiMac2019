@@ -16,7 +16,7 @@
 
 CC       ?= clang
 PKG      ?= pkgconf
-APP_VERSION ?= 0.1.0-rc1
+APP_VERSION ?= 2.0
 APP_BUILD   ?= dev
 
 MACOSX_DEPLOYMENT_TARGET ?= 11.0
@@ -25,6 +25,7 @@ export MACOSX_DEPLOYMENT_TARGET
 CFLAGS   += -O2 -g -Wall -Wextra -Wno-unused-parameter -std=c11
 CFLAGS   += $(shell $(PKG) --cflags libavcodec libavutil sdl2)
 CFLAGS   += -DTB_RECEIVER_VERSION=\"$(APP_VERSION)\" -DTB_RECEIVER_BUILD=\"$(APP_BUILD)\"
+CFLAGS   += -DTB_LANGUAGE_SOURCE_DIR=\"$(abspath ../../TargetBridge-Shared/Languages)\"
 
 LDFLAGS  += $(shell $(PKG) --libs libavcodec libavutil sdl2)
 
@@ -33,7 +34,7 @@ ifeq ($(UNAME_S),Darwin)
 LDFLAGS  += -framework CoreFoundation -framework CoreGraphics -framework CoreText -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework IOSurface -framework CoreServices
 endif
 
-SRC = src/main.c src/net.c src/decoder.c src/display.c
+SRC = src/main.c src/net.c src/decoder.c src/display.c src/tb_i18n.c
 OBJ = $(SRC:.c=.o)
 BIN = tbreceiver
 

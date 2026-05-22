@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import Network
 
 struct TBLocalBridgeInterface: Identifiable, Hashable {
     let name: String
@@ -20,6 +21,7 @@ final class TBDisplaySenderService: ObservableObject {
         didSet {
             language.persist()
             sessions.forEach { $0.language = language }
+            pushLanguageUpdateToDiscoveredReceivers()
             objectWillChange.send()
         }
     }
@@ -40,6 +42,7 @@ final class TBDisplaySenderService: ObservableObject {
         discoveryCancellable = receiverDiscovery.$receivers.sink { [weak self] receivers in
             guard let self else { return }
             discoveredReceivers = receivers
+            pushLanguageUpdateToDiscoveredReceivers()
             objectWillChange.send()
         }
         refreshBridgeInterfaces()
@@ -150,6 +153,44 @@ final class TBDisplaySenderService: ObservableObject {
                 session.localTBIP = fallbackIP
             }
         }
+    }
+
+    private func pushLanguageUpdateToDiscoveredReceivers() {
+        let receivers = discoveredReceivers
+        let languageCode = language.fileStem
+        for receiver in receivers {
+            sendLanguageUpdate(to: receiver.receiverIP, languageCode: languageCode)
+        }
+    }
+
+    private func sendLanguageUpdate(to receiverIP: String, languageCode: String) {
+        guard !receiverIP.isEmpty,
+              let packet = TBMonitorProtocol.makeJSONPacket(
+                type: .uiLanguage,
+                value: TBMonitorUILanguageUpdate(uiLanguage: languageCode)
+              )
+        else { return }
+
+        let connection = NWConnection(
+            host: NWEndpoint.Host(receiverIP),
+            port: NWEndpoint.Port(rawValue: TBMonitorProtocol.port)!,
+            using: .tcp
+        )
+
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                connection.send(content: packet, completion: .contentProcessed { _ in
+                    connection.cancel()
+                })
+            case .failed, .cancelled:
+                connection.cancel()
+            default:
+                break
+            }
+        }
+
+        connection.start(queue: DispatchQueue.global(qos: .utility))
     }
 
     private func detectBridgeInterfaces() -> [TBLocalBridgeInterface] {

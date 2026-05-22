@@ -6,6 +6,7 @@
  */
 
 #include "display.h"
+#include "tb_i18n.h"
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreGraphics/CoreGraphics.h>
@@ -17,7 +18,7 @@
 #include <string.h>
 
 #ifndef TB_RECEIVER_VERSION
-#define TB_RECEIVER_VERSION "0.1.0-rc1"
+#define TB_RECEIVER_VERSION "2.0"
 #endif
 
 #ifndef TB_RECEIVER_BUILD
@@ -44,6 +45,7 @@ struct tb_display {
     char          last_sender[128];
     char          last_panel[128];
     char          last_mode[128];
+    char          last_language[96];
     int           last_drawable_w;
     int           last_drawable_h;
 };
@@ -145,6 +147,7 @@ static void tb_disp_rebuild_status_texture(struct tb_display *d,
                                            const char *sender,
                                            const char *panel,
                                            const char *mode,
+                                           const char *language,
                                            int drawable_w,
                                            int drawable_h) {
     if (!d || drawable_w <= 0 || drawable_h <= 0) return;
@@ -178,29 +181,41 @@ static void tb_disp_rebuild_status_texture(struct tb_display *d,
     tb_disp_fill_rect(ctx, 48, 52, (CGFloat)drawable_w - 96, (CGFloat)drawable_h - 104, 0.12, 0.13, 0.16, 1.0);
     tb_disp_fill_rect(ctx, 48, (CGFloat)drawable_h - 152, (CGFloat)drawable_w - 96, 2, 0.23, 0.25, 0.30, 1.0);
 
-    tb_disp_draw_text(ctx, "TARGETBRIDGE RECEIVER", "Helvetica-Bold", 30, 72, (CGFloat)drawable_h - 76, 0.95, 0.97, 1.0);
-    tb_disp_draw_text(ctx, "5K / HiDPI receiver ready for sender", "Helvetica", 18, 72, (CGFloat)drawable_h - 118, 0.72, 0.76, 0.84);
-    tb_disp_draw_text(ctx, TB_RECEIVER_VERSION, "Menlo-Bold", 18, (CGFloat)drawable_w - 220, (CGFloat)drawable_h - 78, 0.64, 0.69, 0.78);
-    tb_disp_draw_text(ctx, TB_RECEIVER_BUILD, "Menlo", 14, (CGFloat)drawable_w - 220, (CGFloat)drawable_h - 120, 0.53, 0.57, 0.66);
+    const char *current_language = tb_i18n_current_language();
+    const int zh = current_language && strncmp(current_language, "zh", 2) == 0;
+    const char *title_font = zh ? "PingFangSC-Semibold" : "Helvetica-Bold";
+    const char *body_font = zh ? "PingFangSC-Regular" : "Helvetica";
+    const char *section_font = zh ? "PingFangSC-Semibold" : "Helvetica-Bold";
+    const char *mono_font = "Menlo";
+    const char *mono_bold_font = "Menlo-Bold";
 
-    tb_disp_draw_text(ctx, "IP THUNDERBOLT BRIDGE", "Helvetica-Bold", 16, 72, (CGFloat)drawable_h - 190, 0.54, 0.62, 0.76);
-    tb_disp_draw_text(ctx, ip, "Menlo-Bold", 36, 72, (CGFloat)drawable_h - 235, 0.43, 0.93, 0.60);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.title"), title_font, 30, 72, (CGFloat)drawable_h - 76, 0.95, 0.97, 1.0);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.subtitle"), body_font, 18, 72, (CGFloat)drawable_h - 118, 0.72, 0.76, 0.84);
+    tb_disp_draw_text(ctx, TB_RECEIVER_VERSION, mono_bold_font, 18, (CGFloat)drawable_w - 220, (CGFloat)drawable_h - 78, 0.64, 0.69, 0.78);
+    tb_disp_draw_text(ctx, TB_RECEIVER_BUILD, mono_font, 14, (CGFloat)drawable_w - 220, (CGFloat)drawable_h - 120, 0.53, 0.57, 0.66);
 
-    tb_disp_draw_text(ctx, "STATUS", "Helvetica-Bold", 16, 72, (CGFloat)drawable_h - 300, 0.54, 0.62, 0.76);
-    tb_disp_draw_text(ctx, status, "Helvetica", 24, 72, (CGFloat)drawable_h - 338, 0.94, 0.96, 0.99);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.ip_thunderbolt_bridge"), section_font, 16, 72, (CGFloat)drawable_h - 190, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, ip, mono_bold_font, 36, 72, (CGFloat)drawable_h - 235, 0.43, 0.93, 0.60);
 
-    tb_disp_draw_text(ctx, "SENDER", "Helvetica-Bold", 16, 72, (CGFloat)drawable_h - 400, 0.54, 0.62, 0.76);
-    tb_disp_draw_text(ctx, sender, "Helvetica", 22, 72, (CGFloat)drawable_h - 436, 0.94, 0.96, 0.99);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.status"), section_font, 16, 72, (CGFloat)drawable_h - 300, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, status, body_font, 24, 72, (CGFloat)drawable_h - 338, 0.94, 0.96, 0.99);
 
-    tb_disp_draw_text(ctx, "DISPLAY", "Helvetica-Bold", 16, 72, (CGFloat)drawable_h - 498, 0.54, 0.62, 0.76);
-    tb_disp_draw_text(ctx, panel, "Menlo", 22, 72, (CGFloat)drawable_h - 534, 0.94, 0.96, 0.99);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.sender"), section_font, 16, 72, (CGFloat)drawable_h - 400, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, sender, body_font, 22, 72, (CGFloat)drawable_h - 436, 0.94, 0.96, 0.99);
 
-    tb_disp_draw_text(ctx, "STREAM PROFILE", "Helvetica-Bold", 16, 72, (CGFloat)drawable_h - 596, 0.54, 0.62, 0.76);
-    tb_disp_draw_text(ctx, mode, "Menlo", 22, 72, (CGFloat)drawable_h - 632, 0.94, 0.96, 0.99);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.display"), section_font, 16, 72, (CGFloat)drawable_h - 498, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, panel, zh ? body_font : mono_font, 22, 72, (CGFloat)drawable_h - 534, 0.94, 0.96, 0.99);
 
-    tb_disp_draw_text(ctx, "Start the sender on your MacBook and enter this IP address.", "Helvetica", 18, 72, 146, 0.76, 0.80, 0.88);
-    tb_disp_draw_text(ctx, "When the first frame arrives, the receiver switches to fullscreen automatically.", "Helvetica", 18, 72, 116, 0.76, 0.80, 0.88);
-    tb_disp_draw_text(ctx, "If the sender stops, the receiver returns here ready for a new session.", "Helvetica", 18, 72, 86, 0.76, 0.80, 0.88);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.stream_profile"), section_font, 16, 72, (CGFloat)drawable_h - 596, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, mode, zh ? body_font : mono_font, 22, 72, (CGFloat)drawable_h - 632, 0.94, 0.96, 0.99);
+
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.language"), section_font, 16, 72, (CGFloat)drawable_h - 694, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, language, body_font, 22, 72, (CGFloat)drawable_h - 730, 0.94, 0.96, 0.99);
+
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.help_1"), body_font, 18, 72, 146, 0.76, 0.80, 0.88);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.help_2"), body_font, 18, 72, 116, 0.76, 0.80, 0.88);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.help_3"), body_font, 18, 72, 86, 0.76, 0.80, 0.88);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.help_4"), body_font, 18, 72, 56, 0.76, 0.80, 0.88);
 
     CGContextRelease(ctx);
 
@@ -291,6 +306,7 @@ struct tb_display *tb_disp_create(int fullscreen) {
     d->last_sender[0] = '\0';
     d->last_panel[0] = '\0';
     d->last_mode[0] = '\0';
+    d->last_language[0] = '\0';
     d->last_drawable_w = 0;
     d->last_drawable_h = 0;
     d->cursor_x = 0;
@@ -837,14 +853,18 @@ void tb_disp_set_cursor(struct tb_display *d,
     }
 }
 
-int tb_disp_poll_quit(struct tb_display *d) {
+unsigned int tb_disp_poll_actions(struct tb_display *d) {
+    unsigned int actions = TB_DISP_ACTION_NONE;
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         if (ev.type == SDL_QUIT) d->quit = 1;
         else if (ev.type == SDL_KEYDOWN &&
                  ev.key.keysym.sym == SDLK_ESCAPE) d->quit = 1;
+        else if (ev.type == SDL_KEYDOWN &&
+                 ev.key.keysym.sym == SDLK_l) actions |= TB_DISP_ACTION_CYCLE_LANGUAGE;
     }
-    return d->quit;
+    if (d->quit) actions |= TB_DISP_ACTION_QUIT;
+    return actions;
 }
 
 int tb_disp_get_info(struct tb_display *d, struct tb_display_info *info) {
@@ -897,16 +917,18 @@ void tb_disp_render_status(struct tb_display *d,
                            const char *status,
                            const char *sender,
                            const char *panel,
-                           const char *mode) {
+                           const char *mode,
+                           const char *language) {
     if (!d || !d->ren || !d->win) return;
 
     tb_disp_set_connection_state(d, 0);
 
-    if (!ip) ip = "not detected";
-    if (!status) status = "waiting for sender";
-    if (!sender) sender = "waiting";
-    if (!panel) panel = "unknown display";
-    if (!mode) mode = "2560 x 1440 HiDPI on 5K display";
+    if (!ip) ip = tb_i18n_get("receiver.network.not_detected");
+    if (!status) status = tb_i18n_get("receiver.status.waiting_for_sender");
+    if (!sender) sender = tb_i18n_get("receiver.status.waiting");
+    if (!panel) panel = tb_i18n_get("receiver.panel.unknown");
+    if (!mode) mode = tb_i18n_get("receiver.mode.default");
+    if (!language) language = tb_i18n_get("receiver.language.auto");
 
     int drawable_w = 0, drawable_h = 0;
     if (SDL_GetRendererOutputSize(d->ren, &drawable_w, &drawable_h) < 0 ||
@@ -920,6 +942,7 @@ void tb_disp_render_status(struct tb_display *d,
         strcmp(d->last_sender, sender) != 0 ||
         strcmp(d->last_panel, panel) != 0 ||
         strcmp(d->last_mode, mode) != 0 ||
+        strcmp(d->last_language, language) != 0 ||
         d->last_drawable_w != drawable_w ||
         d->last_drawable_h != drawable_h ||
         d->status_tex == NULL) {
@@ -928,9 +951,10 @@ void tb_disp_render_status(struct tb_display *d,
         snprintf(d->last_sender, sizeof(d->last_sender), "%s", sender);
         snprintf(d->last_panel, sizeof(d->last_panel), "%s", panel);
         snprintf(d->last_mode, sizeof(d->last_mode), "%s", mode);
+        snprintf(d->last_language, sizeof(d->last_language), "%s", language);
         d->last_drawable_w = drawable_w;
         d->last_drawable_h = drawable_h;
-        tb_disp_rebuild_status_texture(d, ip, status, sender, panel, mode, drawable_w, drawable_h);
+        tb_disp_rebuild_status_texture(d, ip, status, sender, panel, mode, language, drawable_w, drawable_h);
     }
 
     char title[256];

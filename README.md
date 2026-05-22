@@ -61,6 +61,7 @@ If the receiver does not fill the iMac panel or the cursor/desktop feels scaled 
 - Italian: [docs/QuickStart-IT.md](docs/QuickStart-IT.md)
 - English: [docs/QuickStart-EN.md](docs/QuickStart-EN.md)
 - 中文: [docs/QuickStart-ZH.md](docs/QuickStart-ZH.md)
+- Translation guide: [docs/Translations.md](docs/Translations.md)
 
 ## Screenshots
 

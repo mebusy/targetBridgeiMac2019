@@ -228,13 +228,11 @@ enum TBDisplayCaptureSource: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     func title(_ language: TBDisplaySenderLanguage) -> String {
-        switch (self, language) {
-        case (.desktopMirror, .italian): return "Duplica Desktop"
-        case (.desktopMirror, .english): return "Duplicate Desktop"
-        case (.desktopMirror, .german): return "Desktop duplizieren"
-        case (.extendedDesktop, .italian): return "Desktop Esteso"
-        case (.extendedDesktop, .english): return "Extended Desktop"
-        case (.extendedDesktop, .german): return "Erweiterter Desktop"
+        switch self {
+        case .desktopMirror:
+            return TBDisplaySenderL10n.text("sender.source.desktop_mirror", language)
+        case .extendedDesktop:
+            return TBDisplaySenderL10n.text("sender.source.extended_desktop", language)
         }
     }
 
@@ -398,6 +396,8 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         self.statusText = TBDisplaySenderStatusState.ready.text(language)
         self.receiverPanelText = TBDisplaySenderL10n.waitingReceiverProfile(language)
         self.virtualDisplayText = TBDisplaySenderL10n.virtualDisplayNotCreated(language)
+        self.captureDisplayText = TBDisplaySenderL10n.captureDisplayNotAvailable(language)
+        self.displayStateText = TBDisplaySenderL10n.displayStateNotAvailable(language)
         self.language = language
         self.largeCursor = largeCursor
         self.streamResolutionText = TBDisplaySenderL10n.streamSummary(
@@ -424,8 +424,8 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
     @Published var senderFPS = 0
     @Published var receiverPanelText: String
     @Published var virtualDisplayText: String
-    @Published var captureDisplayText = "Capture display: n/a"
-    @Published var displayStateText = "Display state: n/a"
+    @Published var captureDisplayText: String
+    @Published var displayStateText: String
     @Published var language: TBDisplaySenderLanguage {
         didSet {
             refreshLocalizedText()
@@ -537,6 +537,14 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
             )
         } else {
             virtualDisplayText = TBDisplaySenderL10n.virtualDisplayNotCreated(language)
+        }
+
+        if captureDisplayText.isEmpty || captureDisplayText == TBDisplaySenderL10n.captureDisplayNotAvailable(.italian) || captureDisplayText == TBDisplaySenderL10n.captureDisplayNotAvailable(.english) || captureDisplayText == TBDisplaySenderL10n.captureDisplayNotAvailable(.german) {
+            captureDisplayText = TBDisplaySenderL10n.captureDisplayNotAvailable(language)
+        }
+
+        if displayStateText.isEmpty || displayStateText == TBDisplaySenderL10n.displayStateNotAvailable(.italian) || displayStateText == TBDisplaySenderL10n.displayStateNotAvailable(.english) || displayStateText == TBDisplaySenderL10n.displayStateNotAvailable(.german) {
+            displayStateText = TBDisplaySenderL10n.displayStateNotAvailable(language)
         }
     }
 
@@ -790,8 +798,8 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         baselineDisplayIDs = []
         cursorDisplayID = kCGNullDirectDisplay
         lastCursorPacket = nil
-        captureDisplayText = "Capture display: n/a"
-        displayStateText = "Display state: n/a"
+        captureDisplayText = TBDisplaySenderL10n.captureDisplayNotAvailable(language)
+        displayStateText = TBDisplaySenderL10n.displayStateNotAvailable(language)
     }
 
     private func extendedArrangementDefaultsKey(for profile: TBMonitorDisplayProfile) -> String {
@@ -859,6 +867,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
             type: .helloReceiver,
             value: TBMonitorHelloReceiver(
                 senderName: name,
+                uiLanguage: language.fileStem,
                 capturePreset: preset.title,
                 captureSource: captureSource.title(language),
                 captureWidth: preset.width,
@@ -1044,7 +1053,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
             captureDelegate = delegate
 
             let filter = SCContentFilter(display: display, excludingWindows: [])
-            captureDisplayText = "Capture display: SCDisplay \(display.displayID)"
+            captureDisplayText = TBDisplaySenderL10n.captureDisplaySCDisplay(language, id: display.displayID)
             let stream = SCStream(filter: filter, configuration: configuration, delegate: delegate)
             try stream.addStreamOutput(
                 delegate,
@@ -1090,7 +1099,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         }
 
         directDisplayStream = directCapture
-        captureDisplayText = "Capture display: CGDisplayStream \(displayID)"
+        captureDisplayText = TBDisplaySenderL10n.captureDisplayCGDisplayStream(language, id: displayID)
         isStreaming = true
         if largeCursor { startCursorUpdates(displayID: displayID) }
         streamingActivity = ProcessInfo.processInfo.beginActivity(
@@ -1304,7 +1313,16 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         let virtualMirrors = CGDisplayMirrorsDisplay(virtualDisplayID)
         let mainMirrors = CGDisplayMirrorsDisplay(mainDisplayID)
         let identity = session.identityDescription.isEmpty ? "identity=n/a" : session.identityDescription
-        return "Display state: \(identity) | virtual=\(virtualDisplayID) mirror=\(virtualMirror) mirrors=\(virtualMirrors) | main=\(mainDisplayID) mirror=\(mainMirror) mirrors=\(mainMirrors)"
+        return TBDisplaySenderL10n.displayStateSummary(
+            language: language,
+            identity: identity,
+            virtual: virtualDisplayID,
+            virtualMirror: virtualMirror,
+            virtualMirrors: virtualMirrors,
+            main: mainDisplayID,
+            mainMirror: mainMirror,
+            mainMirrors: mainMirrors
+        )
     }
 
     private func onlineDisplayIDs() -> [CGDirectDisplayID] {

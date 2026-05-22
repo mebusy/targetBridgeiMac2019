@@ -18,6 +18,12 @@ struct tb_display_info {
     char     name[128];
 };
 
+enum tb_display_action {
+    TB_DISP_ACTION_NONE = 0,
+    TB_DISP_ACTION_QUIT = 1 << 0,
+    TB_DISP_ACTION_CYCLE_LANGUAGE = 1 << 1
+};
+
 struct tb_display *tb_disp_create(int fullscreen);
 void               tb_disp_destroy(struct tb_display *d);
 void               tb_disp_set_connection_state(struct tb_display *d, int connected);
@@ -38,8 +44,8 @@ void tb_disp_set_cursor(struct tb_display *d,
                         int visible,
                         int type);
 
-/* Returns 1 if user requested quit (ESC or window close). */
-int  tb_disp_poll_quit(struct tb_display *d);
+/* Poll input actions while idle/connected. */
+unsigned int tb_disp_poll_actions(struct tb_display *d);
 
 /* Query active display/window/drawable information for UI/debug metadata. */
 int  tb_disp_get_info(struct tb_display *d, struct tb_display_info *info);
@@ -50,6 +56,7 @@ void tb_disp_render_status(struct tb_display *d,
                            const char *status,
                            const char *sender,
                            const char *panel,
-                           const char *mode);
+                           const char *mode,
+                           const char *language);
 
 #endif

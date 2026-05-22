@@ -175,11 +175,7 @@ struct TBDisplaySenderContentView: View {
     }
 
     private var settingsTitle: String {
-        switch service.language {
-        case .italian: return "Preferenze"
-        case .english: return "Settings"
-        case .german: return "Einstellungen"
-        }
+        TBDisplaySenderL10n.settingsTitle(service.language)
     }
 
     private func statusChip(_ text: String, tint: Color) -> some View {
@@ -355,8 +351,8 @@ private struct TBDisplaySenderSessionCard: View {
                     infoRow(TBDisplaySenderL10n.virtualDisplayLabel(service.language), session.virtualDisplayText)
                     infoRow(TBDisplaySenderL10n.streamLabel(service.language), session.streamResolutionText)
                     infoRow(TBDisplaySenderL10n.fpsLabel(service.language), "\(session.senderFPS)")
-                    infoRow("Capture", session.captureDisplayText)
-                    infoRow("State", session.displayStateText)
+                    infoRow(TBDisplaySenderL10n.captureLabel(service.language), session.captureDisplayText)
+                    infoRow(TBDisplaySenderL10n.stateLabel(service.language), session.displayStateText)
                 }
             }
         }
@@ -410,51 +406,27 @@ private struct TBDisplaySenderSessionCard: View {
     }
 
     private var routingTitle: String {
-        switch service.language {
-        case .italian: return "Instradamento"
-        case .english: return "Routing"
-        case .german: return "Verbindung"
-        }
+        TBDisplaySenderL10n.routingTitle(service.language)
     }
 
     private var outputTitle: String {
-        switch service.language {
-        case .italian: return "Uscita"
-        case .english: return "Output"
-        case .german: return "Ausgabe"
-        }
+        TBDisplaySenderL10n.outputTitle(service.language)
     }
 
     private var sessionMonitorTitle: String {
-        switch service.language {
-        case .italian: return "Sessione Monitor"
-        case .english: return "Session Monitor"
-        case .german: return "Monitor-Sitzung"
-        }
+        TBDisplaySenderL10n.sessionMonitorTitle(service.language)
     }
 
     private var liveTitle: String {
-        switch service.language {
-        case .italian: return "Attivo"
-        case .english: return "Live"
-        case .german: return "Aktiv"
-        }
+        TBDisplaySenderL10n.statusChipLive(service.language)
     }
 
     private var connectedTitle: String {
-        switch service.language {
-        case .italian: return "Connesso"
-        case .english: return "Connected"
-        case .german: return "Verbunden"
-        }
+        TBDisplaySenderL10n.statusChipConnected(service.language)
     }
 
     private var idleTitle: String {
-        switch service.language {
-        case .italian: return "In attesa"
-        case .english: return "Idle"
-        case .german: return "Bereit"
-        }
+        TBDisplaySenderL10n.statusChipIdle(service.language)
     }
 
     private func controlRow<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
