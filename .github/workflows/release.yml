@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build-sender:
@@ -29,6 +31,11 @@ jobs:
         run: |
           cd build
           zip -r TargetBridge.app.zip TargetBridge.app
+
+      - name: Generate build provenance attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: build/TargetBridge.app.zip
 
       - name: Upload Sender Artifact
         uses: actions/upload-artifact@v7
@@ -64,6 +71,11 @@ jobs:
         run: |
           cd build
           zip -r TargetBridge-Receiver-${{ matrix.arch }}.app.zip "TargetBridge Receiver.app"
+
+      - name: Generate build provenance attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: build/TargetBridge-Receiver-${{ matrix.arch }}.app.zip
 
       - name: Upload Receiver Artifact
         uses: actions/upload-artifact@v7
