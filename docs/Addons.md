@@ -69,6 +69,7 @@ Current capability identifiers
 
 - `network-link`
 - `audio-relay`
+- `input-dockstation`
 
 Notes
 -----
@@ -76,5 +77,13 @@ Notes
 - If an addon is incompatible with the installed Sender version, it will still
   be listed in the UI but marked incompatible.
 - This addon system currently targets the Sender UI and feature gating.
-- Shared keyboard/mouse control, remote services, or code plugins can later be
-  built on top of this manifest system.
+- The `input-dockstation` addon forwards keyboard and mouse input from the
+  Sender to one connected Receiver session at a time.
+- The `input-dockstation` addon requires extra macOS permissions:
+  - on the Sender, accessibility/input-monitoring approval may be needed so
+    TargetBridge can observe keyboard and mouse activity
+  - on the Receiver, accessibility approval may be needed so TargetBridge can
+    inject synthetic keyboard and mouse events
+- The current input relay implementation does not suppress local input on the
+  Sender. Events continue to affect the Sender while also being forwarded to
+  the active Receiver session.

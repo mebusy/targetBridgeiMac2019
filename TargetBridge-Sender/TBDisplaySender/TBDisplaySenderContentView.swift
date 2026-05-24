@@ -523,6 +523,20 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
                         }
                     }
 
+                    if service.inputDockstationAvailable {
+                        settingRow(inputDockstationTitle, details: inputDockstationDetails) {
+                            Toggle(
+                                "",
+                                isOn: Binding(
+                                    get: { service.isInputRelayActive(for: session) },
+                                    set: { service.setInputRelayActive($0, for: session) }
+                                )
+                            )
+                            .labelsHidden()
+                            .disabled(!session.isConnected)
+                        }
+                    }
+
                     VStack(alignment: .leading, spacing: 4) {
                         Text(TBDisplaySenderL10n.streamHint1(service.language))
                         Text(TBDisplaySenderL10n.streamHint2(service.language))
@@ -757,6 +771,24 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         case .english: return "Also send the sender’s system audio to the receiver for this session."
         case .german: return "Ubertragt fur diese Sitzung auch den Systemton des Senders an den Empfanger."
         case .chinese: return "同时将 sender 的系统音频传到此会话的 receiver。"
+        }
+    }
+
+    private var inputDockstationTitle: String {
+        switch service.language {
+        case .italian: return "Input Dockstation"
+        case .english: return "Input Dockstation"
+        case .german: return "Input Dockstation"
+        case .chinese: return "输入扩展坞"
+        }
+    }
+
+    private var inputDockstationDetails: String {
+        switch service.language {
+        case .italian: return "Inoltra tastiera e mouse del sender a questo receiver. Gli eventi restano attivi anche localmente sul sender, quindi e una modalita esplicita per controllare un secondo Mac con un solo set di periferiche."
+        case .english: return "Forward the sender keyboard and mouse to this receiver. Events remain active locally on the sender, so this is an explicit mode for controlling a second Mac with one set of peripherals."
+        case .german: return "Leite Tastatur und Maus des Senders an diesen Receiver weiter. Die Ereignisse bleiben lokal auf dem Sender aktiv; dies ist daher ein expliziter Modus, um einen zweiten Mac mit einem einzigen Satz Peripherie zu steuern."
+        case .chinese: return "将发送端的键盘和鼠标转发到这个接收端。事件仍会在发送端本地生效，因此这是一个显式模式，用一套外设控制第二台 Mac。"
         }
     }
 

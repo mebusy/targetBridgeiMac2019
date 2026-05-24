@@ -64,10 +64,12 @@ final class TBDisplaySenderService: ObservableObject {
             objectWillChange.send()
         }
     }
+    @Published var activeInputRelaySessionID: UUID?
 
     private var sessionCancellables: [UUID: AnyCancellable] = [:]
     private let receiverDiscovery = TBReceiverDiscovery()
     private let addonStore = TBAddonStore.shared
+    private let inputRelayController = TBInputRelayController()
     private var discoveryCancellable: AnyCancellable?
     private var addonCancellable: AnyCancellable?
 
@@ -129,6 +131,10 @@ final class TBDisplaySenderService: ObservableObject {
         isAddonCapabilityEnabled(.audioRelay)
     }
 
+    var inputDockstationAvailable: Bool {
+        isAddonCapabilityEnabled(.inputDockstation)
+    }
+
     func addSession() {
         let session = TBDisplaySenderSession(
             language: language,
@@ -153,6 +159,10 @@ final class TBDisplaySenderService: ObservableObject {
     func removeSession(_ session: TBDisplaySenderSession) {
         guard sessions.count > 1 else { return }
         session.stop()
+        if activeInputRelaySessionID == session.id {
+            activeInputRelaySessionID = nil
+            updateInputRelayController()
+        }
         sessions.removeAll { $0.id == session.id }
         sessionCancellables.removeValue(forKey: session.id)
         normalizeSessionInterfaces()
@@ -252,6 +262,20 @@ final class TBDisplaySenderService: ObservableObject {
         }
     }
 
+    func isInputRelayActive(for session: TBDisplaySenderSession) -> Bool {
+        activeInputRelaySessionID == session.id
+    }
+
+    func setInputRelayActive(_ enabled: Bool, for session: TBDisplaySenderSession) {
+        if enabled {
+            activeInputRelaySessionID = session.id
+        } else if activeInputRelaySessionID == session.id {
+            activeInputRelaySessionID = nil
+        }
+        updateInputRelayController()
+        objectWillChange.send()
+    }
+
     private func isAddonCapabilityEnabled(_ capability: TBAddonCapability) -> Bool {
         addonStore.isCapabilityEnabled(capability)
     }
@@ -259,6 +283,7 @@ final class TBDisplaySenderService: ObservableObject {
     private func normalizeAddonState() {
         let networkLinkEnabled = isAddonCapabilityEnabled(.networkLink)
         let audioEnabled = audioRelayAvailable
+        let inputEnabled = inputDockstationAvailable
 
         for session in sessions {
             session.audioAddonAvailable = audioEnabled
@@ -270,7 +295,32 @@ final class TBDisplaySenderService: ObservableObject {
             }
         }
 
+        if !inputEnabled {
+            activeInputRelaySessionID = nil
+        } else if let activeID = activeInputRelaySessionID,
+                  sessions.contains(where: { $0.id == activeID }) == false {
+            activeInputRelaySessionID = nil
+        }
+
         normalizeSessionInterfaces()
+        updateInputRelayController()
+    }
+
+    private func updateInputRelayController() {
+        guard inputDockstationAvailable,
+              let sessionID = activeInputRelaySessionID
+        else {
+            inputRelayController.stop()
+            return
+        }
+
+        inputRelayController.start { [weak self] relayEvent in
+            guard let self,
+                  let session = self.sessions.first(where: { $0.id == sessionID }),
+                  session.isConnected
+            else { return }
+            session.sendInputEvent(relayEvent)
+        }
     }
 
     private func suggestedInterfaceForNewSession(transportKind: TBTransportKind) -> TBLocalLinkInterface? {

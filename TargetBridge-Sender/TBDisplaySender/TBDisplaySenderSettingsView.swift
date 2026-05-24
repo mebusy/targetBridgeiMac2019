@@ -206,9 +206,9 @@ struct TBDisplaySenderSettingsView: View {
                     }
                 }
 
-                if !addon.manifest.capabilities.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(capabilitiesTitle)
+                    if !addon.manifest.capabilities.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(capabilitiesTitle)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
 
@@ -506,6 +506,10 @@ struct TBDisplaySenderSettingsView: View {
         case (.audioRelay, .english): return "Audio Relay"
         case (.audioRelay, .german): return "Audio Relay"
         case (.audioRelay, .chinese): return "音频转发"
+        case (.inputDockstation, .italian): return "Input Dockstation"
+        case (.inputDockstation, .english): return "Input Dockstation"
+        case (.inputDockstation, .german): return "Input Dockstation"
+        case (.inputDockstation, .chinese): return "输入扩展坞"
         }
     }
 }

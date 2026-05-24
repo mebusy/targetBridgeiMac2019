@@ -21,6 +21,8 @@
 
 #include <SDL.h>
 #include <dns_sd.h>
+#include <CoreFoundation/CoreFoundation.h>
+#include <CoreGraphics/CoreGraphics.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -100,6 +102,7 @@ static void tb_receiver_save_language_preference(const char *language_pref);
 static void tb_receiver_apply_language_preference(struct app *a);
 static void tb_receiver_cycle_language_preference(struct app *a);
 static void tb_receiver_refresh_language_text(struct app *a);
+static void tb_receiver_apply_input_event(const uint8_t *payload, size_t len);
 
 static int tb_receiver_is_valid_language_pref(const char *language_pref) {
     return language_pref &&
@@ -446,6 +449,102 @@ static int extract_json_bool_field(const uint8_t *payload,
     return extract_json_int_field(payload, len, key, out_value);
 }
 
+static CGPoint tb_receiver_current_mouse_location(void) {
+    CGPoint point = CGPointZero;
+    CGEventRef event = CGEventCreate(NULL);
+    if (event) {
+        point = CGEventGetLocation(event);
+        CFRelease(event);
+    }
+    return point;
+}
+
+static void tb_receiver_post_mouse_move(int dx, int dy) {
+    CGPoint current = tb_receiver_current_mouse_location();
+    CGPoint target = CGPointMake(current.x + dx, current.y - dy);
+    CGEventRef event = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved, target, kCGMouseButtonLeft);
+    if (!event) return;
+    CGEventPost(kCGHIDEventTap, event);
+    CFRelease(event);
+}
+
+static void tb_receiver_post_mouse_button(CGEventType type, CGMouseButton button) {
+    CGPoint current = tb_receiver_current_mouse_location();
+    CGEventRef event = CGEventCreateMouseEvent(NULL, type, current, button);
+    if (!event) return;
+    CGEventPost(kCGHIDEventTap, event);
+    CFRelease(event);
+}
+
+static void tb_receiver_post_scroll(int scroll_x, int scroll_y) {
+    CGEventRef event = CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitLine, 2, scroll_y, scroll_x);
+    if (!event) return;
+    CGEventPost(kCGHIDEventTap, event);
+    CFRelease(event);
+}
+
+static void tb_receiver_post_key(uint16_t key_code, int is_down) {
+    CGEventRef event = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)key_code, is_down ? true : false);
+    if (!event) return;
+    CGEventPost(kCGHIDEventTap, event);
+    CFRelease(event);
+}
+
+static void tb_receiver_apply_input_event(const uint8_t *payload, size_t len) {
+    char kind[32];
+    kind[0] = '\0';
+    extract_json_string_field(payload, len, "\"kind\"", kind, sizeof(kind));
+    if (kind[0] == '\0') return;
+
+    if (strcmp(kind, "move") == 0) {
+        int dx = 0;
+        int dy = 0;
+        (void)extract_json_int_field(payload, len, "\"dx\"", &dx);
+        (void)extract_json_int_field(payload, len, "\"dy\"", &dy);
+        tb_receiver_post_mouse_move(dx, dy);
+        return;
+    }
+
+    if (strcmp(kind, "leftDown") == 0) {
+        tb_receiver_post_mouse_button(kCGEventLeftMouseDown, kCGMouseButtonLeft);
+        return;
+    }
+    if (strcmp(kind, "leftUp") == 0) {
+        tb_receiver_post_mouse_button(kCGEventLeftMouseUp, kCGMouseButtonLeft);
+        return;
+    }
+    if (strcmp(kind, "rightDown") == 0) {
+        tb_receiver_post_mouse_button(kCGEventRightMouseDown, kCGMouseButtonRight);
+        return;
+    }
+    if (strcmp(kind, "rightUp") == 0) {
+        tb_receiver_post_mouse_button(kCGEventRightMouseUp, kCGMouseButtonRight);
+        return;
+    }
+    if (strcmp(kind, "otherDown") == 0) {
+        tb_receiver_post_mouse_button(kCGEventOtherMouseDown, kCGMouseButtonCenter);
+        return;
+    }
+    if (strcmp(kind, "otherUp") == 0) {
+        tb_receiver_post_mouse_button(kCGEventOtherMouseUp, kCGMouseButtonCenter);
+        return;
+    }
+    if (strcmp(kind, "scroll") == 0) {
+        int scroll_x = 0;
+        int scroll_y = 0;
+        (void)extract_json_int_field(payload, len, "\"scrollX\"", &scroll_x);
+        (void)extract_json_int_field(payload, len, "\"scrollY\"", &scroll_y);
+        tb_receiver_post_scroll(scroll_x, scroll_y);
+        return;
+    }
+    if (strcmp(kind, "keyDown") == 0 || strcmp(kind, "keyUp") == 0) {
+        int key_code = 0;
+        if (extract_json_int_field(payload, len, "\"keyCode\"", &key_code)) {
+            tb_receiver_post_key((uint16_t)key_code, strcmp(kind, "keyDown") == 0);
+        }
+    }
+}
+
 /* ---- Callbacks: decoder → display ------------------------------------ */
 
 static void on_frame(const uint8_t *y, int y_stride,
@@ -606,6 +705,9 @@ static void on_packet(uint8_t type, const uint8_t *payload, size_t len, void *ud
             
             SDL_UnlockAudioDevice(a->audio_device);
         }
+        break;
+    case TB_PKT_INPUT_EVENT:
+        tb_receiver_apply_input_event(payload, len);
         break;
     case TB_PKT_HEARTBEAT:
         break;

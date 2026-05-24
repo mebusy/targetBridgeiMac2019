@@ -11,6 +11,7 @@ enum TBMonitorPacketType: UInt8 {
     case heartbeat = 0x30
     case teardown = 0x31
     case cursor = 0x32
+    case inputEvent = 0x33
     case testData = 0x40
 }
 
@@ -62,6 +63,15 @@ struct TBMonitorCursor: Codable {
     var height: Int
     var visible: Bool
     var type: Int
+}
+
+struct TBMonitorInputEvent: Codable {
+    var kind: String
+    var dx: Int?
+    var dy: Int?
+    var scrollX: Int?
+    var scrollY: Int?
+    var keyCode: UInt16?
 }
 
 enum TBMonitorProtocol {

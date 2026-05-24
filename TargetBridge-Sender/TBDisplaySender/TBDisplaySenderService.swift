@@ -1885,6 +1885,13 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         connection?.send(content: packet, completion: .contentProcessed({ _ in }))
     }
 
+    func sendInputEvent(_ event: TBMonitorInputEvent) {
+        guard isConnected,
+              let packet = TBMonitorProtocol.makeJSONPacket(type: .inputEvent, value: event)
+        else { return }
+        send(packet)
+    }
+
 }
 
 private final class SBAudioConverter: Sendable {

@@ -16,6 +16,7 @@
  * type 0x30 = heartbeat (JSON)
  * type 0x31 = teardown (JSON)
  * type 0x32 = cursor position (JSON)
+ * type 0x33 = input relay event (JSON)
  *
  * Compatible with the new TBDisplaySender Swift app.
  */
@@ -36,6 +37,7 @@
 #define TB_PKT_HEARTBEAT        0x30
 #define TB_PKT_TEARDOWN         0x31
 #define TB_PKT_CURSOR           0x32
+#define TB_PKT_INPUT_EVENT      0x33
 #define TB_PKT_TEST_DATA        0x40
 
 #define TB_HDR_BYTES        5   /* 4 length + 1 type */
