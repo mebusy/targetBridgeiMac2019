@@ -56,6 +56,8 @@
   "sender.settings.section.appearance": "外观",
   "sender.settings.section.about": "关于",
   "sender.settings.button_accessibility": "打开设置",
+  "sender.toggle.stream_audio": "传输音频",
+  "sender.toggle.default_stream_audio": "默认在新会话中启用音频",
 
   "receiver.ui.title": "TARGETBRIDGE 接收端",
   "receiver.ui.subtitle": "5K / HiDPI 接收端，等待发送端连接",

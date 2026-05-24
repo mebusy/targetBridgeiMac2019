@@ -45,6 +45,8 @@
   "sender.mode_line_5": "Choose the source, then balance motion and clarity with the stream profile.",
   "sender.toggle.show_menu_bar_icon": "Show icon in top bar",
   "sender.toggle.large_cursor": "Large cursor on receiver",
+  "sender.toggle.stream_audio": "Stream audio",
+  "sender.toggle.default_stream_audio": "Enable audio by default for new sessions",
   "sender.menu.show_main_window": "Show main window",
   "sender.menu.hide_top_bar_icon": "Hide top bar icon",
   "sender.menu.quit": "Quit TargetBridge",

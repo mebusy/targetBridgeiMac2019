@@ -163,6 +163,8 @@ struct TBDisplaySenderContentView: View {
 
                 Toggle(TBDisplaySenderL10n.largeCursor(service.language), isOn: $service.largeCursor)
                     .disabled(service.anyConnected)
+
+                Toggle(TBDisplaySenderL10n.defaultStreamAudio(service.language), isOn: $service.audioEnabled)
             }
         }
     }
@@ -260,6 +262,11 @@ private struct TBDisplaySenderSessionCard: View {
                         .labelsHidden()
                         .pickerStyle(.segmented)
                         .disabled(session.isConnected || session.isStreaming)
+                    }
+
+                    controlRow(TBDisplaySenderL10n.streamAudio(service.language)) {
+                        Toggle("", isOn: $session.audioEnabled)
+                            .labelsHidden()
                     }
 
                     VStack(alignment: .leading, spacing: 4) {

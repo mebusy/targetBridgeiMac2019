@@ -45,6 +45,8 @@
   "sender.mode_line_5": "Quelle wählen, dann Bewegungsfluss und Schärfe mit dem Stream-Profil abstimmen.",
   "sender.toggle.show_menu_bar_icon": "Symbol in Menüleiste anzeigen",
   "sender.toggle.large_cursor": "Großer Zeiger auf dem Empfänger",
+  "sender.toggle.stream_audio": "Audio übertragen",
+  "sender.toggle.default_stream_audio": "Audio standardmäßig für neue Sitzungen aktivieren",
   "sender.menu.show_main_window": "Hauptfenster anzeigen",
   "sender.menu.hide_top_bar_icon": "Symbol in Menüleiste ausblenden",
   "sender.menu.quit": "TargetBridge beenden",

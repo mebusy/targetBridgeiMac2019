@@ -304,6 +304,14 @@ enum TBDisplaySenderL10n {
         text("sender.toggle.large_cursor", language)
     }
 
+    static func streamAudio(_ language: TBDisplaySenderLanguage) -> String {
+        text("sender.toggle.stream_audio", language)
+    }
+
+    static func defaultStreamAudio(_ language: TBDisplaySenderLanguage) -> String {
+        text("sender.toggle.default_stream_audio", language)
+    }
+
     static func showMainWindow(_ language: TBDisplaySenderLanguage) -> String {
         text("sender.menu.show_main_window", language)
     }
