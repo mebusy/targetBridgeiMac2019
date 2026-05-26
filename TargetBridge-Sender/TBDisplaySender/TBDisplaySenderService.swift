@@ -1282,7 +1282,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
                 let mirrorConfigured = self.configureDesktopMirror(for: self.session.displayID)
                 if !mirrorConfigured {
                     NSLog(
-                        "TargetBridge: unable to enable mirror mode for virtual display %u; continuing with extended desktop fallback",
+                        "TargetBridge: unable to enable mirror mode for virtual display %u on first attempt; scheduling retry",
                         self.session.displayID
                     )
                 }
@@ -1303,6 +1303,8 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
 
             if self.captureSource == .extendedDesktop {
                 self.scheduleExtendedDesktopRecovery(for: self.session.displayID)
+            } else if self.captureSource == .desktopMirror {
+                self.scheduleDesktopMirrorRecovery(for: self.session.displayID)
             }
 
             self.sessionAckSent = false
@@ -1586,6 +1588,40 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
                 )
 
                 if configured || (CGDisplayIsInMirrorSet(virtualDisplayID) == 0 && hasAppliedArrangement) {
+                    return
+                }
+            }
+        }
+    }
+
+    private func scheduleDesktopMirrorRecovery(for virtualDisplayID: CGDirectDisplayID) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            for attempt in 1...12 {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+
+                guard self.captureSource == .desktopMirror,
+                      self.session.displayID == virtualDisplayID,
+                      self.activeProfile != nil
+                else { return }
+
+                if CGDisplayIsInMirrorSet(virtualDisplayID) != 0 {
+                    self.displayStateText = self.describeDisplayState(for: virtualDisplayID)
+                    return
+                }
+
+                let configured = self.configureDesktopMirror(for: virtualDisplayID)
+                self.displayStateText = self.describeDisplayState(for: virtualDisplayID)
+                NSLog(
+                    "TargetBridge: desktop mirror recovery attempt %d for %u configured=%d state=%@",
+                    attempt,
+                    virtualDisplayID,
+                    configured,
+                    self.displayStateText
+                )
+
+                if configured || CGDisplayIsInMirrorSet(virtualDisplayID) != 0 {
                     return
                 }
             }
