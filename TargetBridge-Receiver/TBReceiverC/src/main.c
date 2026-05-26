@@ -1210,7 +1210,11 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
         case 59: case 62: key_down = (flags & kCGEventFlagMaskControl) != 0; break;
         case 57: key_down = (flags & kCGEventFlagMaskAlphaShift) != 0; break;
         case 63:
+            /* Swallow fn/globe locally while receiver is master, but never forward
+             * it to the sender. Letting it pass through locally can trigger emoji,
+             * dictation, or other system overlays when combined with normal keys. */
             handled = 0;
+            should_consume = a->input_tap_consumes_events;
             break;
         default:
             handled = 0;
@@ -1296,11 +1300,13 @@ static void tb_receiver_refresh_input_capture(struct app *a) {
     if (!a) return;
     if (strcmp(a->input_control_mode, "receiverMaster") == 0 && a->client_fd >= 0) {
         tb_receiver_start_input_tap(a);
+        tb_disp_set_input_intercept_active(a->disp, 1);
         tb_disp_set_input_capture_active(a->disp, a->input_tap == NULL ? 1 : 0);
         tb_receiver_input_log("[input] receiverMaster capture path = %s",
                               a->input_tap ? "global-tap" : "sdl-fallback");
     } else {
         tb_receiver_stop_input_tap(a);
+        tb_disp_set_input_intercept_active(a->disp, 0);
         tb_disp_set_input_capture_active(a->disp, 0);
         tb_receiver_input_log("[input] input capture disabled");
     }
@@ -1552,7 +1558,7 @@ int main(int argc, char **argv) {
         }
 
         if (strcmp(a.input_control_mode, "receiverMaster") == 0 && a.client_fd >= 0) {
-            if (t - a.last_clipboard_poll_ms >= 400) {
+            if (t - a.last_clipboard_poll_ms >= 100) {
                 a.last_clipboard_poll_ms = t;
                 tb_receiver_send_clipboard_if_changed(&a);
             }

@@ -37,6 +37,7 @@ struct tb_display {
     int           preferred_fullscreen;
     int           is_connected;
     int           input_capture_active;
+    int           input_intercept_active;
     struct tb_input_event input_events[128];
     int           input_head;
     int           input_tail;
@@ -1026,9 +1027,11 @@ unsigned int tb_disp_poll_actions(struct tb_display *d) {
     while (SDL_PollEvent(&ev)) {
         if (ev.type == SDL_QUIT) d->quit = 1;
         else if (!d->input_capture_active &&
+                 !d->input_intercept_active &&
                  ev.type == SDL_KEYDOWN &&
                  ev.key.keysym.sym == SDLK_ESCAPE) d->quit = 1;
         else if (!d->input_capture_active &&
+                 !d->input_intercept_active &&
                  ev.type == SDL_KEYDOWN &&
                  ev.key.keysym.sym == SDLK_l) actions |= TB_DISP_ACTION_CYCLE_LANGUAGE;
         else if (d->input_capture_active) {
@@ -1173,6 +1176,11 @@ void tb_disp_set_connection_state(struct tb_display *d, int connected) {
 void tb_disp_set_input_capture_active(struct tb_display *d, int active) {
     if (!d) return;
     d->input_capture_active = active ? 1 : 0;
+}
+
+void tb_disp_set_input_intercept_active(struct tb_display *d, int active) {
+    if (!d) return;
+    d->input_intercept_active = active ? 1 : 0;
 }
 
 void tb_disp_render_status(struct tb_display *d,

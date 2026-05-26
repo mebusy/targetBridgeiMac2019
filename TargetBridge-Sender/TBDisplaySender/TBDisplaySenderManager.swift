@@ -426,7 +426,7 @@ final class TBDisplaySenderService: ObservableObject {
 
     private func startClipboardMonitoring() {
         clipboardTimer?.invalidate()
-        clipboardTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
+        clipboardTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.pollClipboardIfNeeded()
             }

@@ -1156,6 +1156,12 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         CGEvent(source: nil)?.location
     }
 
+    private func localInputEventSource() -> CGEventSource? {
+        let source = CGEventSource(stateID: .hidSystemState)
+        source?.localEventsSuppressionInterval = 0
+        return source
+    }
+
     private func logLocalInputInjectionStateIfNeeded(context: String) {
         let trusted = AXIsProcessTrusted()
         TBInputDebugLog.log("sender input injection state trusted=\(trusted) context=\(context)")
@@ -1165,22 +1171,27 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         logLocalInputInjectionStateIfNeeded(context: "mouseMove")
         guard let current = currentLocalMouseLocation() else { return }
         let target = CGPoint(x: current.x + CGFloat(dx), y: current.y + CGFloat(dy))
-        CGWarpMouseCursorPosition(target)
-        guard let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: target, mouseButton: button) else { return }
-        event.post(tap: .cgSessionEventTap)
+        let shouldWarp = (type == .mouseMoved)
+        if shouldWarp {
+            CGWarpMouseCursorPosition(target)
+        }
+        guard let event = CGEvent(mouseEventSource: localInputEventSource(), mouseType: type, mouseCursorPosition: target, mouseButton: button) else { return }
+        event.setIntegerValueField(.mouseEventDeltaX, value: Int64(dx))
+        event.setIntegerValueField(.mouseEventDeltaY, value: Int64(dy))
+        event.post(tap: .cghidEventTap)
     }
 
     private func postLocalMouseButton(type: CGEventType, button: CGMouseButton) {
         logLocalInputInjectionStateIfNeeded(context: "mouseButton")
         guard let current = currentLocalMouseLocation() else { return }
-        guard let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: current, mouseButton: button) else { return }
+        guard let event = CGEvent(mouseEventSource: localInputEventSource(), mouseType: type, mouseCursorPosition: current, mouseButton: button) else { return }
         event.post(tap: .cghidEventTap)
     }
 
     private func postLocalScroll(scrollX: Int, scrollY: Int) {
         logLocalInputInjectionStateIfNeeded(context: "scroll")
         guard let event = CGEvent(
-            scrollWheelEvent2Source: nil,
+            scrollWheelEvent2Source: localInputEventSource(),
             units: .line,
             wheelCount: 2,
             wheel1: Int32(scrollY),
@@ -1192,7 +1203,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
 
     private func postLocalKey(keyCode: UInt16, isDown: Bool) {
         logLocalInputInjectionStateIfNeeded(context: "key")
-        guard let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: isDown) else { return }
+        guard let event = CGEvent(keyboardEventSource: localInputEventSource(), virtualKey: CGKeyCode(keyCode), keyDown: isDown) else { return }
         event.post(tap: .cghidEventTap)
     }
 
