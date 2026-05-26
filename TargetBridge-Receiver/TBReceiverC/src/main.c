@@ -71,6 +71,7 @@ struct app {
     char     bonjour_name[128];
     CFMachPortRef input_tap;
     CFRunLoopSourceRef input_tap_source;
+    int      input_tap_consumes_events;
 
     SDL_AudioDeviceID audio_device;
 
@@ -1100,6 +1101,8 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
 
     if (strcmp(a->input_control_mode, "receiverMaster") != 0) return event;
 
+    int should_consume = 0;
+
     switch (type) {
     case kCGEventMouseMoved:
     case kCGEventLeftMouseDragged:
@@ -1114,11 +1117,13 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
             if (location.x <= CGRectGetMinX(bounds) + 2.0 && dx < 0) {
                 a->last_target_switch_ms = now;
                 tb_receiver_send_target_switch(a, -1);
+                should_consume = a->input_tap_consumes_events;
                 break;
             }
             if (location.x >= CGRectGetMaxX(bounds) - 2.0 && dx > 0) {
                 a->last_target_switch_ms = now;
                 tb_receiver_send_target_switch(a, 1);
+                should_consume = a->input_tap_consumes_events;
                 break;
             }
         }
@@ -1127,30 +1132,38 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
         else if (type == kCGEventRightMouseDragged) kind = "rightDrag";
         else if (type == kCGEventOtherMouseDragged) kind = "otherDrag";
         tb_receiver_send_input_event(a, kind, 1, dx, 1, dy, 0, 0, 0, 0, 0, 0);
+        should_consume = a->input_tap_consumes_events;
         break;
     }
     case kCGEventLeftMouseDown:
         tb_receiver_send_input_event(a, "leftDown", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        should_consume = a->input_tap_consumes_events;
         break;
     case kCGEventLeftMouseUp:
         tb_receiver_send_input_event(a, "leftUp", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        should_consume = a->input_tap_consumes_events;
         break;
     case kCGEventRightMouseDown:
         tb_receiver_send_input_event(a, "rightDown", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        should_consume = a->input_tap_consumes_events;
         break;
     case kCGEventRightMouseUp:
         tb_receiver_send_input_event(a, "rightUp", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        should_consume = a->input_tap_consumes_events;
         break;
     case kCGEventOtherMouseDown:
         tb_receiver_send_input_event(a, "otherDown", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        should_consume = a->input_tap_consumes_events;
         break;
     case kCGEventOtherMouseUp:
         tb_receiver_send_input_event(a, "otherUp", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        should_consume = a->input_tap_consumes_events;
         break;
     case kCGEventScrollWheel: {
         int sx = (int)CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis2);
         int sy = (int)CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis1);
         tb_receiver_send_input_event(a, "scroll", 0, 0, 0, 0, 1, sx, 1, sy, 0, 0);
+        should_consume = a->input_tap_consumes_events;
         break;
     }
     case kCGEventKeyDown: {
@@ -1159,14 +1172,17 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
         if ((flags & kCGEventFlagMaskControl) && (flags & kCGEventFlagMaskAlternate)) {
             if (key_code == 123) {
                 tb_receiver_send_target_switch(a, -1);
+                should_consume = a->input_tap_consumes_events;
                 break;
             }
             if (key_code == 124) {
                 tb_receiver_send_target_switch(a, 1);
+                should_consume = a->input_tap_consumes_events;
                 break;
             }
         }
         tb_receiver_send_input_event(a, "keyDown", 0, 0, 0, 0, 0, 0, 0, 0, 1, key_code);
+        should_consume = a->input_tap_consumes_events;
         break;
     }
     case kCGEventKeyUp:
@@ -1175,9 +1191,11 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
         CGEventFlags flags = CGEventGetFlags(event);
         if ((flags & kCGEventFlagMaskControl) && (flags & kCGEventFlagMaskAlternate) &&
             (key_code == 123 || key_code == 124)) {
+            should_consume = a->input_tap_consumes_events;
             break;
         }
         tb_receiver_send_input_event(a, "keyUp", 0, 0, 0, 0, 0, 0, 0, 0, 1, key_code);
+        should_consume = a->input_tap_consumes_events;
         break;
     }
     case kCGEventFlagsChanged: {
@@ -1200,6 +1218,7 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
         }
         if (handled) {
             tb_receiver_send_input_event(a, key_down ? "keyDown" : "keyUp", 0, 0, 0, 0, 0, 0, 0, 0, 1, key_code);
+            should_consume = a->input_tap_consumes_events;
         }
         break;
     }
@@ -1207,7 +1226,7 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
         break;
     }
 
-    return event;
+    return should_consume ? NULL : event;
 }
 
 static void tb_receiver_stop_input_tap(struct app *a) {
@@ -1222,10 +1241,14 @@ static void tb_receiver_stop_input_tap(struct app *a) {
         CFRelease(a->input_tap);
         a->input_tap = NULL;
     }
+    a->input_tap_consumes_events = 0;
 }
 
 static void tb_receiver_start_input_tap(struct app *a) {
     if (!a || a->input_tap) return;
+
+    const int can_consume = tb_receiver_accessibility_trusted() ? 1 : 0;
+    CGEventTapOptions tap_options = can_consume ? kCGEventTapOptionDefault : kCGEventTapOptionListenOnly;
 
     CGEventMask mask =
         CGEventMaskBit(kCGEventMouseMoved) |
@@ -1246,7 +1269,7 @@ static void tb_receiver_start_input_tap(struct app *a) {
     a->input_tap = CGEventTapCreate(
         kCGHIDEventTap,
         kCGHeadInsertEventTap,
-        kCGEventTapOptionListenOnly,
+        tap_options,
         mask,
         tb_receiver_input_tap_callback,
         a
@@ -1264,7 +1287,9 @@ static void tb_receiver_start_input_tap(struct app *a) {
     }
     CFRunLoopAddSource(CFRunLoopGetCurrent(), a->input_tap_source, kCFRunLoopCommonModes);
     CGEventTapEnable(a->input_tap, true);
-    tb_receiver_input_log("[input] global event tap enabled for receiverMaster mode");
+    a->input_tap_consumes_events = can_consume;
+    tb_receiver_input_log("[input] global event tap enabled for receiverMaster mode (consume=%s)",
+                          can_consume ? "true" : "false");
 }
 
 static void tb_receiver_refresh_input_capture(struct app *a) {

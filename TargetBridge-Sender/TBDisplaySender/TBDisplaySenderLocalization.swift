@@ -358,6 +358,18 @@ enum TBDisplaySenderL10n {
         text("sender.toggle.large_cursor", language)
     }
 
+    static func preventDisplaySleep(_ language: TBDisplaySenderLanguage) -> String {
+        text("sender.toggle.prevent_display_sleep", language)
+    }
+
+    static func autoRestartOnWake(_ language: TBDisplaySenderLanguage) -> String {
+        text("sender.toggle.auto_restart_on_wake", language)
+    }
+
+    static func restartCaptureButton(_ language: TBDisplaySenderLanguage) -> String {
+        text("sender.button.restart_capture", language)
+    }
+
     static func streamAudio(_ language: TBDisplaySenderLanguage) -> String {
         text("sender.toggle.stream_audio", language)
     }

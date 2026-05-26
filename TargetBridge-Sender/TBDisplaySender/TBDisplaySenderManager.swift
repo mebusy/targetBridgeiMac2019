@@ -60,6 +60,30 @@ final class TBDisplaySenderService: ObservableObject {
             objectWillChange.send()
         }
     }
+    @Published var preventDisplaySleep: Bool = {
+        if UserDefaults.standard.object(forKey: "fd.tbdisplaysender.preventDisplaySleep") == nil {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: "fd.tbdisplaysender.preventDisplaySleep")
+    }() {
+        didSet {
+            UserDefaults.standard.set(preventDisplaySleep, forKey: "fd.tbdisplaysender.preventDisplaySleep")
+            sessions.forEach { $0.preventDisplaySleep = preventDisplaySleep }
+            objectWillChange.send()
+        }
+    }
+    @Published var autoRestartOnWake: Bool = {
+        if UserDefaults.standard.object(forKey: "fd.tbdisplaysender.autoRestartOnWake") == nil {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: "fd.tbdisplaysender.autoRestartOnWake")
+    }() {
+        didSet {
+            UserDefaults.standard.set(autoRestartOnWake, forKey: "fd.tbdisplaysender.autoRestartOnWake")
+            sessions.forEach { $0.autoRestartOnWake = autoRestartOnWake }
+            objectWillChange.send()
+        }
+    }
     @Published var audioEnabled: Bool = UserDefaults.standard.object(forKey: "fd.tbdisplaysender.audioEnabled") as? Bool ?? true {
         didSet {
             UserDefaults.standard.set(audioEnabled, forKey: "fd.tbdisplaysender.audioEnabled")
@@ -164,6 +188,8 @@ final class TBDisplaySenderService: ObservableObject {
         let session = TBDisplaySenderSession(
             language: language,
             largeCursor: largeCursor,
+            preventDisplaySleep: preventDisplaySleep,
+            autoRestartOnWake: autoRestartOnWake,
             audioEnabled: audioEnabled && audioRelayAvailable
         )
         if let previous = sessions.last {

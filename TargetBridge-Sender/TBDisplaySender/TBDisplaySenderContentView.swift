@@ -678,6 +678,14 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
                                 Text(cableRateText)
                                     .font(.system(.body, design: .rounded, weight: .semibold))
                                     .foregroundStyle(cableRateColor)
+
+                                Spacer()
+
+                                Button(TBDisplaySenderL10n.restartCaptureButton(service.language)) {
+                                    session.restartCaptureNow()
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(!session.canRestartCapture)
                             }
 
                             Divider().overlay(Color.white.opacity(0.08))

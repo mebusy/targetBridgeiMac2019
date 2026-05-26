@@ -55,6 +55,8 @@ struct TBDisplaySenderSettingsView: View {
                     Toggle(TBDisplaySenderL10n.showMenuBarIcon(service.language), isOn: $service.showsMenuBarIcon)
                     Toggle(TBDisplaySenderL10n.largeCursor(service.language), isOn: $service.largeCursor)
                         .disabled(service.anyConnected)
+                    Toggle(TBDisplaySenderL10n.preventDisplaySleep(service.language), isOn: $service.preventDisplaySleep)
+                    Toggle(TBDisplaySenderL10n.autoRestartOnWake(service.language), isOn: $service.autoRestartOnWake)
                 }
 
                 settingsSection(title: behaviorTitle) {
