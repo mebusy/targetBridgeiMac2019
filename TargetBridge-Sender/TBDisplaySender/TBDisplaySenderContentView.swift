@@ -193,6 +193,9 @@ private struct TBDisplaySenderSessionCard: View {
             VStack(alignment: .leading, spacing: 16) {
                 topBar
                 summaryGrid
+                if session.isConnected {
+                    brightnessCard
+                }
                 monitorDetailsCard
             }
         }
@@ -283,6 +286,32 @@ private struct TBDisplaySenderSessionCard: View {
                     infoRow(TBDisplaySenderL10n.virtualDisplayLabel(service.language), session.virtualDisplayText)
                     infoRow(TBDisplaySenderL10n.streamLabel(service.language), session.streamResolutionText)
                     infoRow(TBDisplaySenderL10n.fpsLabel(service.language), "\(session.senderFPS)")
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var brightnessCard: some View {
+        SurfaceSubcard {
+            VStack(alignment: .leading, spacing: 10) {
+                sectionHeading(brightnessTitle)
+                HStack(spacing: 12) {
+                    Image(systemName: "sun.min.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+
+                    Slider(value: $session.brightness, in: 0.0...1.0)
+                        .tint(.orange)
+
+                    Image(systemName: "sun.max.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+
+                    Text("\(Int((session.brightness * 100).rounded()))%")
+                        .font(.system(.body, design: .monospaced))
+                        .frame(width: 44, alignment: .trailing)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -380,6 +409,15 @@ private struct TBDisplaySenderSessionCard: View {
         case .english: return "Telemetry"
         case .german: return "Telemetrie"
         case .chinese: return "遥测"
+        }
+    }
+
+    private var brightnessTitle: String {
+        switch service.language {
+        case .italian: return "Luminosità"
+        case .english: return "Brightness"
+        case .german: return "Helligkeit"
+        case .chinese: return "亮度"
         }
     }
 

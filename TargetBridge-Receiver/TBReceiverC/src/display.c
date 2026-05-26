@@ -13,6 +13,7 @@
 #include <CoreGraphics/CoreGraphics.h>
 #include <CoreText/CoreText.h>
 #include <SDL.h>
+#include <dlfcn.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,6 +53,7 @@ struct tb_display {
     char          last_panel[128];
     char          last_mode[128];
     char          last_language[96];
+    char          last_permissions[160];
     int           last_drawable_w;
     int           last_drawable_h;
 };
@@ -278,6 +280,7 @@ static void tb_disp_rebuild_status_texture(struct tb_display *d,
                                            const char *panel,
                                            const char *mode,
                                            const char *language,
+                                           const char *permissions,
                                            int drawable_w,
                                            int drawable_h) {
     if (!d || drawable_w <= 0 || drawable_h <= 0) return;
@@ -341,6 +344,9 @@ static void tb_disp_rebuild_status_texture(struct tb_display *d,
 
     tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.language"), section_font, 16, 72, (CGFloat)drawable_h - 694, 0.54, 0.62, 0.76);
     tb_disp_draw_text(ctx, language, body_font, 22, 72, (CGFloat)drawable_h - 730, 0.94, 0.96, 0.99);
+
+    tb_disp_draw_text(ctx, "Permissions", section_font, 16, 72, (CGFloat)drawable_h - 792, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, permissions, body_font, 20, 72, (CGFloat)drawable_h - 826, 0.94, 0.96, 0.99);
 
     tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.help_1"), body_font, 18, 72, 146, 0.76, 0.80, 0.88);
     tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.help_2"), body_font, 18, 72, 116, 0.76, 0.80, 0.88);
@@ -1042,7 +1048,10 @@ unsigned int tb_disp_poll_actions(struct tb_display *d) {
                     d->last_target_switch_tick = SDL_GetTicks();
                     break;
                 }
-                input_event.kind = TB_INPUT_EVENT_MOVE;
+                if (ev.motion.state & SDL_BUTTON_LMASK) input_event.kind = TB_INPUT_EVENT_LEFT_DRAG;
+                else if (ev.motion.state & SDL_BUTTON_RMASK) input_event.kind = TB_INPUT_EVENT_RIGHT_DRAG;
+                else if (ev.motion.state & SDL_BUTTON_MMASK) input_event.kind = TB_INPUT_EVENT_OTHER_DRAG;
+                else input_event.kind = TB_INPUT_EVENT_MOVE;
                 input_event.dx = ev.motion.xrel;
                 input_event.dy = ev.motion.yrel;
                 tb_disp_queue_input_event(d, &input_event);
@@ -1172,7 +1181,8 @@ void tb_disp_render_status(struct tb_display *d,
                            const char *sender,
                            const char *panel,
                            const char *mode,
-                           const char *language) {
+                           const char *language,
+                           const char *permissions) {
     if (!d || !d->ren || !d->win) return;
 
     tb_disp_set_connection_state(d, 0);
@@ -1183,6 +1193,7 @@ void tb_disp_render_status(struct tb_display *d,
     if (!panel) panel = tb_i18n_get("receiver.panel.unknown");
     if (!mode) mode = tb_i18n_get("receiver.mode.default");
     if (!language) language = tb_i18n_get("receiver.language.auto");
+    if (!permissions) permissions = "";
 
     int drawable_w = 0, drawable_h = 0;
     if (SDL_GetRendererOutputSize(d->ren, &drawable_w, &drawable_h) < 0 ||
@@ -1197,6 +1208,7 @@ void tb_disp_render_status(struct tb_display *d,
         strcmp(d->last_panel, panel) != 0 ||
         strcmp(d->last_mode, mode) != 0 ||
         strcmp(d->last_language, language) != 0 ||
+        strcmp(d->last_permissions, permissions) != 0 ||
         d->last_drawable_w != drawable_w ||
         d->last_drawable_h != drawable_h ||
         d->status_tex == NULL) {
@@ -1206,9 +1218,10 @@ void tb_disp_render_status(struct tb_display *d,
         snprintf(d->last_panel, sizeof(d->last_panel), "%s", panel);
         snprintf(d->last_mode, sizeof(d->last_mode), "%s", mode);
         snprintf(d->last_language, sizeof(d->last_language), "%s", language);
+        snprintf(d->last_permissions, sizeof(d->last_permissions), "%s", permissions);
         d->last_drawable_w = drawable_w;
         d->last_drawable_h = drawable_h;
-        tb_disp_rebuild_status_texture(d, ip, status, sender, panel, mode, language, drawable_w, drawable_h);
+        tb_disp_rebuild_status_texture(d, ip, status, sender, panel, mode, language, permissions, drawable_w, drawable_h);
     }
 
     char title[256];
@@ -1218,4 +1231,36 @@ void tb_disp_render_status(struct tb_display *d,
     SDL_RenderClear(d->ren);
     if (d->status_tex) SDL_RenderCopy(d->ren, d->status_tex, NULL, NULL);
     SDL_RenderPresent(d->ren);
+}
+
+void tb_disp_set_brightness(struct tb_display *d, double level) {
+    (void)d;
+    if (level < 0.0) level = 0.0;
+    if (level > 1.0) level = 1.0;
+
+    void *lib = dlopen("/System/Library/PrivateFrameworks/DisplayServices.framework/Versions/A/DisplayServices", RTLD_LAZY);
+    if (!lib) {
+        fprintf(stderr, "[disp] failed to dlopen DisplayServices\n");
+        return;
+    }
+
+    typedef int (*SetBrightnessFunc)(CGDirectDisplayID display, float brightness);
+    SetBrightnessFunc set_brightness = (SetBrightnessFunc)dlsym(lib, "DisplayServicesSetBrightness");
+    if (!set_brightness) {
+        fprintf(stderr, "[disp] failed to find DisplayServicesSetBrightness symbol\n");
+        dlclose(lib);
+        return;
+    }
+
+    CGDirectDisplayID displays[16];
+    uint32_t count = 0;
+    if (CGGetActiveDisplayList(16, displays, &count) == kCGErrorSuccess) {
+        for (uint32_t i = 0; i < count; i++) {
+            set_brightness(displays[i], (float)level);
+        }
+    } else {
+        set_brightness(CGMainDisplayID(), (float)level);
+    }
+
+    dlclose(lib);
 }

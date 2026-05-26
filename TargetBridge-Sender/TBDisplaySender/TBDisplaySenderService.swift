@@ -467,6 +467,11 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         }
     }
     @Published var audioEnabled: Bool
+    @Published var brightness: Double = 1.0 {
+        didSet {
+            sendBrightnessUpdate()
+        }
+    }
     var audioAddonAvailable = true
     var receiverSupportsHEVCDecodeHint: Bool?
     var receiverInputMonitoringTrustedHint: Bool?
@@ -738,6 +743,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
                     self.startHeartbeat()
                     self.sendHello()
                     self.sendInputControlModeUpdate()
+                    self.sendBrightnessUpdate()
                     self.receiveLoop(on: conn)
                 case .failed(let error):
                     self.setStatus(.connectionFailed(error.localizedDescription))
@@ -1031,6 +1037,22 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         send(packet)
     }
 
+    private func sendBrightnessUpdate() {
+        guard let packet = TBMonitorProtocol.makeJSONPacket(
+            type: .brightness,
+            value: TBMonitorBrightness(level: brightness)
+        ) else { return }
+        send(packet)
+    }
+
+    func sendClipboardText(_ text: String) {
+        guard let packet = TBMonitorProtocol.makeJSONPacket(
+            type: .clipboard,
+            value: TBMonitorClipboard(text: text)
+        ) else { return }
+        send(packet)
+    }
+
     private func sendHeartbeat() {
         heartbeatSequence += 1
         guard let packet = TBMonitorProtocol.makeJSONPacket(
@@ -1098,6 +1120,12 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
                 setStatus(.receiverTerminatedSession)
                 stop(resetStatusTo: nil)
                 return
+            case .clipboard:
+                if let clipboard = TBMonitorProtocol.decodeJSON(TBMonitorClipboard.self, from: payload) {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(clipboard.text, forType: .string)
+                }
             default:
                 break
             }
@@ -1113,12 +1141,12 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         TBInputDebugLog.log("sender input injection state trusted=\(trusted) context=\(context)")
     }
 
-    private func postLocalMouseMove(dx: Int, dy: Int) {
+    private func postLocalMouseMove(dx: Int, dy: Int, type: CGEventType = .mouseMoved, button: CGMouseButton = .left) {
         logLocalInputInjectionStateIfNeeded(context: "mouseMove")
         guard let current = currentLocalMouseLocation() else { return }
         let target = CGPoint(x: current.x + CGFloat(dx), y: current.y + CGFloat(dy))
         CGWarpMouseCursorPosition(target)
-        guard let event = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: target, mouseButton: .left) else { return }
+        guard let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: target, mouseButton: button) else { return }
         event.post(tap: .cgSessionEventTap)
     }
 
@@ -1153,6 +1181,12 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         switch event.kind {
         case "move":
             postLocalMouseMove(dx: event.dx ?? 0, dy: event.dy ?? 0)
+        case "leftDrag":
+            postLocalMouseMove(dx: event.dx ?? 0, dy: event.dy ?? 0, type: .leftMouseDragged, button: .left)
+        case "rightDrag":
+            postLocalMouseMove(dx: event.dx ?? 0, dy: event.dy ?? 0, type: .rightMouseDragged, button: .right)
+        case "otherDrag":
+            postLocalMouseMove(dx: event.dx ?? 0, dy: event.dy ?? 0, type: .otherMouseDragged, button: .center)
         case "leftDown":
             postLocalMouseButton(type: .leftMouseDown, button: .left)
         case "leftUp":
@@ -1194,6 +1228,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         receiverPanelText = TBDisplaySenderL10n.receiverSummary(profile, language: language)
         sendHello()
         sendInputControlModeUpdate()
+        sendBrightnessUpdate()
 
         Task { @MainActor in
             if self.isCableTestConnection {

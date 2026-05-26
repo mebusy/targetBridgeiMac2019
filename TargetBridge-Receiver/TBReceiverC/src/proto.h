@@ -18,6 +18,8 @@
  * type 0x32 = cursor position (JSON)
  * type 0x33 = input relay event (JSON)
  * type 0x34 = input control mode update (JSON)
+ * type 0x35 = brightness update (JSON)
+ * type 0x36 = clipboard update (JSON)
  *
  * Compatible with the new TBDisplaySender Swift app.
  */
@@ -40,6 +42,8 @@
 #define TB_PKT_CURSOR           0x32
 #define TB_PKT_INPUT_EVENT      0x33
 #define TB_PKT_INPUT_CONTROL    0x34
+#define TB_PKT_BRIGHTNESS       0x35
+#define TB_PKT_CLIPBOARD        0x36
 #define TB_PKT_TEST_DATA        0x40
 
 #define TB_HDR_BYTES        5   /* 4 length + 1 type */

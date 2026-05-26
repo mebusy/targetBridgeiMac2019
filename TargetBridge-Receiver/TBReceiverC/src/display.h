@@ -27,6 +27,9 @@ enum tb_display_action {
 enum tb_input_event_kind {
     TB_INPUT_EVENT_NONE = 0,
     TB_INPUT_EVENT_MOVE,
+    TB_INPUT_EVENT_LEFT_DRAG,
+    TB_INPUT_EVENT_RIGHT_DRAG,
+    TB_INPUT_EVENT_OTHER_DRAG,
     TB_INPUT_EVENT_SCROLL,
     TB_INPUT_EVENT_LEFT_DOWN,
     TB_INPUT_EVENT_LEFT_UP,
@@ -70,6 +73,8 @@ void tb_disp_set_cursor(struct tb_display *d,
                         int visible,
                         int type);
 
+void tb_disp_set_brightness(struct tb_display *d, double level);
+
 /* Poll input actions while idle/connected. */
 unsigned int tb_disp_poll_actions(struct tb_display *d);
 int          tb_disp_pop_input_event(struct tb_display *d, struct tb_input_event *out);
@@ -84,6 +89,7 @@ void tb_disp_render_status(struct tb_display *d,
                            const char *sender,
                            const char *panel,
                            const char *mode,
-                           const char *language);
+                           const char *language,
+                           const char *permissions);
 
 #endif

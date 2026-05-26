@@ -13,6 +13,8 @@ enum TBMonitorPacketType: UInt8 {
     case cursor = 0x32
     case inputEvent = 0x33
     case inputControlMode = 0x34
+    case brightness = 0x35
+    case clipboard = 0x36
     case testData = 0x40
 }
 
@@ -79,6 +81,14 @@ struct TBMonitorInputEvent: Codable {
 
 struct TBMonitorInputControlMode: Codable {
     var mode: String
+}
+
+struct TBMonitorBrightness: Codable {
+    var level: Double
+}
+
+struct TBMonitorClipboard: Codable {
+    var text: String
 }
 
 enum TBMonitorProtocol {

@@ -72,6 +72,8 @@ final class TBDisplaySenderService: ObservableObject {
     private let inputRelayController = TBInputRelayController()
     private var discoveryCancellable: AnyCancellable?
     private var addonCancellable: AnyCancellable?
+    private var clipboardTimer: Timer?
+    private var lastClipboardChangeCount: Int = NSPasteboard.general.changeCount
 
     private init() {
         discoveryCancellable = receiverDiscovery.$receivers.sink { [weak self] receivers in
@@ -89,6 +91,7 @@ final class TBDisplaySenderService: ObservableObject {
         refreshLocalInterfaces()
         addonStore.refresh()
         addSession()
+        startClipboardMonitoring()
     }
 
     var anyConnected: Bool {
@@ -393,6 +396,29 @@ final class TBDisplaySenderService: ObservableObject {
                 self?.switchSenderMasterTarget(direction: direction)
             }
         )
+    }
+
+    private func startClipboardMonitoring() {
+        clipboardTimer?.invalidate()
+        clipboardTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.pollClipboardIfNeeded()
+            }
+        }
+    }
+
+    private func pollClipboardIfNeeded() {
+        guard let session = sessions.first(where: { $0.inputControlRole == .senderMaster && ($0.isConnected || $0.isStreaming) }) else {
+            lastClipboardChangeCount = NSPasteboard.general.changeCount
+            return
+        }
+
+        let pasteboard = NSPasteboard.general
+        guard pasteboard.changeCount != lastClipboardChangeCount else { return }
+        lastClipboardChangeCount = pasteboard.changeCount
+
+        guard let text = pasteboard.string(forType: .string) else { return }
+        session.sendClipboardText(text)
     }
 
     private func suggestedInterfaceForNewSession(transportKind: TBTransportKind) -> TBLocalLinkInterface? {

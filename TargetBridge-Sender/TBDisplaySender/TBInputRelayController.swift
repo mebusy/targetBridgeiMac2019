@@ -107,9 +107,36 @@ final class TBInputRelayController {
 
     private func convert(_ event: NSEvent) -> TBMonitorInputEvent? {
         switch event.type {
-        case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
+        case .mouseMoved:
             return TBMonitorInputEvent(
                 kind: "move",
+                dx: Int(event.deltaX.rounded()),
+                dy: Int(event.deltaY.rounded()),
+                scrollX: nil,
+                scrollY: nil,
+                keyCode: nil
+            )
+        case .leftMouseDragged:
+            return TBMonitorInputEvent(
+                kind: "leftDrag",
+                dx: Int(event.deltaX.rounded()),
+                dy: Int(event.deltaY.rounded()),
+                scrollX: nil,
+                scrollY: nil,
+                keyCode: nil
+            )
+        case .rightMouseDragged:
+            return TBMonitorInputEvent(
+                kind: "rightDrag",
+                dx: Int(event.deltaX.rounded()),
+                dy: Int(event.deltaY.rounded()),
+                scrollX: nil,
+                scrollY: nil,
+                keyCode: nil
+            )
+        case .otherMouseDragged:
+            return TBMonitorInputEvent(
+                kind: "otherDrag",
                 dx: Int(event.deltaX.rounded()),
                 dy: Int(event.deltaY.rounded()),
                 scrollX: nil,

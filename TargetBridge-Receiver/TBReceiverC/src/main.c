@@ -63,6 +63,7 @@ struct app {
     char     mode_text[128];
     char     language_pref[8];
     char     language_text[96];
+    char     permissions_text[160];
     char     sender_ui_language[8];
     char     input_control_mode[32];
 
@@ -81,6 +82,8 @@ struct app {
     uint64_t input_events_sent;
     uint64_t input_events_received;
     uint64_t last_target_switch_ms;
+    uint64_t last_clipboard_poll_ms;
+    char     last_clipboard_text[4096];
 };
 
 static int tb_should_log_input_event(uint64_t count) {
@@ -145,9 +148,16 @@ static void tb_receiver_save_language_preference(const char *language_pref);
 static void tb_receiver_apply_language_preference(struct app *a);
 static void tb_receiver_cycle_language_preference(struct app *a);
 static void tb_receiver_refresh_language_text(struct app *a);
+static void tb_receiver_refresh_permissions_text(struct app *a);
+static int tb_receiver_input_monitoring_trusted(void);
+static int tb_receiver_accessibility_trusted(void);
 static void tb_receiver_apply_input_event(const uint8_t *payload, size_t len);
 static void tb_receiver_apply_input_control_mode(struct app *a, const uint8_t *payload, size_t len);
 static void tb_receiver_refresh_input_capture(struct app *a);
+static void tb_receiver_set_clipboard_text(const char *text);
+static int tb_receiver_get_clipboard_text(char *dest, size_t size);
+static void tb_receiver_send_clipboard_if_changed(struct app *a);
+static void write_be32(uint8_t *dst, uint32_t value);
 
 static int tb_receiver_is_valid_language_pref(const char *language_pref) {
     return language_pref &&
@@ -251,6 +261,48 @@ static void tb_receiver_refresh_language_text(struct app *a) {
     }
 }
 
+static void tb_receiver_refresh_permissions_text(struct app *a) {
+    if (!a) return;
+
+    const int input_monitoring = tb_receiver_input_monitoring_trusted();
+    const int accessibility = tb_receiver_accessibility_trusted();
+    const char *lang = tb_i18n_current_language();
+
+    if (lang && strncmp(lang, "it", 2) == 0) {
+        snprintf(
+            a->permissions_text,
+            sizeof(a->permissions_text),
+            "Monitoraggio input: %s   Accessibilità: %s",
+            input_monitoring ? "OK" : "Mancante",
+            accessibility ? "OK" : "Mancante"
+        );
+    } else if (lang && strncmp(lang, "de", 2) == 0) {
+        snprintf(
+            a->permissions_text,
+            sizeof(a->permissions_text),
+            "Input-Monitoring: %s   Bedienungshilfen: %s",
+            input_monitoring ? "OK" : "Fehlt",
+            accessibility ? "OK" : "Fehlt"
+        );
+    } else if (lang && strncmp(lang, "zh", 2) == 0) {
+        snprintf(
+            a->permissions_text,
+            sizeof(a->permissions_text),
+            "输入监控：%s   辅助功能：%s",
+            input_monitoring ? "正常" : "缺失",
+            accessibility ? "正常" : "缺失"
+        );
+    } else {
+        snprintf(
+            a->permissions_text,
+            sizeof(a->permissions_text),
+            "Input Monitoring: %s   Accessibility: %s",
+            input_monitoring ? "OK" : "Missing",
+            accessibility ? "OK" : "Missing"
+        );
+    }
+}
+
 static void tb_receiver_apply_language_preference(struct app *a) {
     if (!a) return;
 
@@ -266,6 +318,7 @@ static void tb_receiver_apply_language_preference(struct app *a) {
 
     tb_refresh_idle_localized_strings(a);
     tb_receiver_refresh_language_text(a);
+    tb_receiver_refresh_permissions_text(a);
 }
 
 static int tb_receiver_input_monitoring_trusted(void) {
@@ -300,6 +353,7 @@ static void tb_refresh_idle_localized_strings(struct app *a) {
     tb_copy_i18n(a->status_text, sizeof(a->status_text), "receiver.status.waiting_for_sender");
     tb_copy_i18n(a->sender_text, sizeof(a->sender_text), "receiver.status.waiting");
     tb_copy_i18n(a->mode_text, sizeof(a->mode_text), "receiver.mode.default");
+    tb_receiver_refresh_permissions_text(a);
     if (a->ip_text[0] == '\0') {
         tb_copy_i18n(a->ip_text, sizeof(a->ip_text), "receiver.network.not_detected");
     }
@@ -308,6 +362,87 @@ static void tb_refresh_idle_localized_strings(struct app *a) {
 static void tb_copy_i18n(char *dest, size_t size, const char *key) {
     if (!dest || size == 0) return;
     snprintf(dest, size, "%s", tb_i18n_get(key));
+}
+
+static void tb_json_escape_string(const char *src, char *dest, size_t size) {
+    if (!dest || size == 0) return;
+    if (!src) {
+        dest[0] = '\0';
+        return;
+    }
+
+    size_t j = 0;
+    for (size_t i = 0; src[i] != '\0' && j + 1 < size; i++) {
+        char c = src[i];
+        const char *escape = NULL;
+        switch (c) {
+        case '\\': escape = "\\\\"; break;
+        case '"': escape = "\\\""; break;
+        case '\n': escape = "\\n"; break;
+        case '\r': escape = "\\r"; break;
+        case '\t': escape = "\\t"; break;
+        default: break;
+        }
+
+        if (escape) {
+            for (size_t k = 0; escape[k] != '\0' && j + 1 < size; k++) {
+                dest[j++] = escape[k];
+            }
+        } else {
+            dest[j++] = c;
+        }
+    }
+    dest[j] = '\0';
+}
+
+static void tb_receiver_set_clipboard_text(const char *text) {
+    FILE *pipe = popen("pbcopy", "w");
+    if (!pipe) return;
+    if (text && *text) {
+        fwrite(text, 1, strlen(text), pipe);
+    }
+    pclose(pipe);
+}
+
+static int tb_receiver_get_clipboard_text(char *dest, size_t size) {
+    if (!dest || size == 0) return 0;
+    dest[0] = '\0';
+
+    FILE *pipe = popen("pbpaste", "r");
+    if (!pipe) return 0;
+
+    size_t total = 0;
+    while (!feof(pipe) && total + 1 < size) {
+        size_t n = fread(dest + total, 1, size - total - 1, pipe);
+        total += n;
+        if (n == 0) break;
+    }
+    dest[total] = '\0';
+    pclose(pipe);
+    return 1;
+}
+
+static void tb_receiver_send_clipboard_if_changed(struct app *a) {
+    if (!a || strcmp(a->input_control_mode, "receiverMaster") != 0 || a->client_fd < 0) return;
+
+    char text[4096];
+    if (!tb_receiver_get_clipboard_text(text, sizeof(text))) return;
+    if (strcmp(text, a->last_clipboard_text) == 0) return;
+
+    snprintf(a->last_clipboard_text, sizeof(a->last_clipboard_text), "%s", text);
+
+    char escaped[8192];
+    tb_json_escape_string(text, escaped, sizeof(escaped));
+
+    char json[8300];
+    int len = snprintf(json, sizeof(json), "{\"text\":\"%s\"}", escaped);
+    if (len <= 0 || (size_t)len >= sizeof(json)) return;
+
+    uint8_t header[TB_HDR_BYTES];
+    write_be32(header, (uint32_t)(1 + len));
+    header[4] = TB_PKT_CLIPBOARD;
+    if (write(a->client_fd, header, TB_HDR_BYTES) != TB_HDR_BYTES) return;
+    (void)write(a->client_fd, json, (size_t)len);
 }
 
 static void tb_format_i18n(char *dest,
@@ -502,6 +637,29 @@ static int extract_json_bool_field(const uint8_t *payload,
     return extract_json_int_field(payload, len, key, out_value);
 }
 
+static int extract_json_double_field(const uint8_t *payload,
+                                     size_t len,
+                                     const char *key,
+                                     double *out_value) {
+    if (!payload || !key || !out_value) return 0;
+
+    const char *text = (const char *)payload;
+    const char *pos = strstr(text, key);
+    if (!pos) return 0;
+
+    pos = strchr(pos, ':');
+    if (!pos) return 0;
+    pos++;
+    while ((size_t)(pos - text) < len && (*pos == ' ' || *pos == '\t')) pos++;
+    if ((size_t)(pos - text) >= len) return 0;
+
+    char *end = NULL;
+    double value = strtod(pos, &end);
+    if (end == pos) return 0;
+    *out_value = value;
+    return 1;
+}
+
 static CGPoint tb_receiver_current_mouse_location(void) {
     CGPoint point = CGPointZero;
     CGEventRef event = CGEventCreate(NULL);
@@ -512,10 +670,10 @@ static CGPoint tb_receiver_current_mouse_location(void) {
     return point;
 }
 
-static void tb_receiver_post_mouse_move(int dx, int dy) {
+static void tb_receiver_post_mouse_move(int dx, int dy, CGEventType type, CGMouseButton button) {
     CGPoint current = tb_receiver_current_mouse_location();
     CGPoint target = CGPointMake(current.x + dx, current.y + dy);
-    CGEventRef event = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved, target, kCGMouseButtonLeft);
+    CGEventRef event = CGEventCreateMouseEvent(NULL, type, target, button);
     if (!event) return;
     CGEventPost(kCGHIDEventTap, event);
     CFRelease(event);
@@ -555,7 +713,34 @@ static void tb_receiver_apply_input_event(const uint8_t *payload, size_t len) {
         int dy = 0;
         (void)extract_json_int_field(payload, len, "\"dx\"", &dx);
         (void)extract_json_int_field(payload, len, "\"dy\"", &dy);
-        tb_receiver_post_mouse_move(dx, dy);
+        tb_receiver_post_mouse_move(dx, dy, kCGEventMouseMoved, kCGMouseButtonLeft);
+        return;
+    }
+
+    if (strcmp(kind, "leftDrag") == 0) {
+        int dx = 0;
+        int dy = 0;
+        (void)extract_json_int_field(payload, len, "\"dx\"", &dx);
+        (void)extract_json_int_field(payload, len, "\"dy\"", &dy);
+        tb_receiver_post_mouse_move(dx, dy, kCGEventLeftMouseDragged, kCGMouseButtonLeft);
+        return;
+    }
+
+    if (strcmp(kind, "rightDrag") == 0) {
+        int dx = 0;
+        int dy = 0;
+        (void)extract_json_int_field(payload, len, "\"dx\"", &dx);
+        (void)extract_json_int_field(payload, len, "\"dy\"", &dy);
+        tb_receiver_post_mouse_move(dx, dy, kCGEventRightMouseDragged, kCGMouseButtonRight);
+        return;
+    }
+
+    if (strcmp(kind, "otherDrag") == 0) {
+        int dx = 0;
+        int dy = 0;
+        (void)extract_json_int_field(payload, len, "\"dx\"", &dx);
+        (void)extract_json_int_field(payload, len, "\"dy\"", &dy);
+        tb_receiver_post_mouse_move(dx, dy, kCGEventOtherMouseDragged, kCGMouseButtonCenter);
         return;
     }
 
@@ -744,19 +929,33 @@ static void on_packet(uint8_t type, const uint8_t *payload, size_t len, void *ud
             tb_disp_set_cursor(a->disp, x, y, w, h, visible, type);
         }
         break;
+    case TB_PKT_BRIGHTNESS:
+        {
+            double level = 1.0;
+            (void)extract_json_double_field(payload, len, "\"level\"", &level);
+            tb_disp_set_brightness(a->disp, level);
+        }
+        break;
+    case TB_PKT_CLIPBOARD:
+        {
+            char text[4096];
+            extract_json_string_field(payload, len, "\"text\"", text, sizeof(text));
+            tb_receiver_set_clipboard_text(text);
+        }
+        break;
     case TB_PKT_AUDIO_FRAME:
         if (a->audio_device != 0) {
             SDL_LockAudioDevice(a->audio_device);
-            
-            // Limit audio backlog to 80ms (80 * 192 = 15360 bytes).
-            // If the buffer would exceed this, smoothly discard the oldest excess bytes.
-            const int cap_bytes = 15360;
+
+            // Limit audio backlog to 150ms (150 * 192 = 28800 bytes) to cushion
+            // against network / scheduling jitter while still keeping playout tight.
+            const int cap_bytes = 28800;
             if (a->audio_buf_size + len > cap_bytes) {
                 int excess = (a->audio_buf_size + len) - cap_bytes;
                 a->audio_buf_tail = (a->audio_buf_tail + excess) % AUDIO_BUF_CAP;
                 a->audio_buf_size -= excess;
             }
-            
+
             // Write payload to circular buffer
             if (a->audio_buf_size + (int)len <= AUDIO_BUF_CAP) {
                 int first = AUDIO_BUF_CAP - a->audio_buf_head;
@@ -769,7 +968,7 @@ static void on_packet(uint8_t type, const uint8_t *payload, size_t len, void *ud
                 a->audio_buf_head = (a->audio_buf_head + (int)len) % AUDIO_BUF_CAP;
                 a->audio_buf_size += (int)len;
             }
-            
+
             SDL_UnlockAudioDevice(a->audio_device);
         }
         break;
@@ -923,7 +1122,11 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
                 break;
             }
         }
-        tb_receiver_send_input_event(a, "move", 1, dx, 1, dy, 0, 0, 0, 0, 0, 0);
+        const char *kind = "move";
+        if (type == kCGEventLeftMouseDragged) kind = "leftDrag";
+        else if (type == kCGEventRightMouseDragged) kind = "rightDrag";
+        else if (type == kCGEventOtherMouseDragged) kind = "otherDrag";
+        tb_receiver_send_input_event(a, kind, 1, dx, 1, dy, 0, 0, 0, 0, 0, 0);
         break;
     }
     case kCGEventLeftMouseDown:
@@ -1154,6 +1357,7 @@ static void close_client(struct app *a) {
     tb_disp_set_connection_state(a->disp, 0);
     tb_disp_set_cursor(a->disp, 0, 0, 1, 1, 0, 0);
     tb_refresh_idle_localized_strings(a);
+    a->last_clipboard_text[0] = '\0';
     tb_parser_free(&a->parser);
     tb_parser_init(&a->parser, on_packet, a);
     tb_dec_reset(a->dec);   /* fresh decoder for next session */
@@ -1318,15 +1522,29 @@ int main(int argc, char **argv) {
         }
 
         if (a.client_fd < 0 || !a.have_video_frame) {
-            tb_disp_render_status(a.disp, a.ip_text, a.status_text, a.sender_text, a.panel_text, a.mode_text, a.language_text);
+            tb_receiver_refresh_permissions_text(&a);
+            tb_disp_render_status(a.disp, a.ip_text, a.status_text, a.sender_text, a.panel_text, a.mode_text, a.language_text, a.permissions_text);
         }
 
         if (strcmp(a.input_control_mode, "receiverMaster") == 0 && a.client_fd >= 0) {
+            if (t - a.last_clipboard_poll_ms >= 400) {
+                a.last_clipboard_poll_ms = t;
+                tb_receiver_send_clipboard_if_changed(&a);
+            }
             struct tb_input_event input_event;
             while (tb_disp_pop_input_event(a.disp, &input_event)) {
                 switch (input_event.kind) {
                 case TB_INPUT_EVENT_MOVE:
                     tb_receiver_send_input_event(&a, "move", 1, input_event.dx, 1, input_event.dy, 0, 0, 0, 0, 0, 0);
+                    break;
+                case TB_INPUT_EVENT_LEFT_DRAG:
+                    tb_receiver_send_input_event(&a, "leftDrag", 1, input_event.dx, 1, input_event.dy, 0, 0, 0, 0, 0, 0);
+                    break;
+                case TB_INPUT_EVENT_RIGHT_DRAG:
+                    tb_receiver_send_input_event(&a, "rightDrag", 1, input_event.dx, 1, input_event.dy, 0, 0, 0, 0, 0, 0);
+                    break;
+                case TB_INPUT_EVENT_OTHER_DRAG:
+                    tb_receiver_send_input_event(&a, "otherDrag", 1, input_event.dx, 1, input_event.dy, 0, 0, 0, 0, 0, 0);
                     break;
                 case TB_INPUT_EVENT_SCROLL:
                     tb_receiver_send_input_event(&a, "scroll", 0, 0, 0, 0, 1, input_event.scroll_x, 1, input_event.scroll_y, 0, 0);
