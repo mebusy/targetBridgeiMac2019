@@ -482,6 +482,38 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
             }
         }
     }
+
+    var shortHostName: String? {
+        if let receiver = TBDisplaySenderService.shared.discoveredReceivers.first(where: {
+            $0.id == selectedReceiverID ||
+            $0.preferredIP == receiverIP ||
+            $0.thunderboltIP == receiverIP ||
+            $0.networkIP == receiverIP
+        }) {
+            return receiver.shortHostName
+        }
+        return nil
+    }
+
+    var receiverDisplayName: String {
+        if let host = shortHostName {
+            return host
+        }
+        return receiverIP.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var receiverSubtitle: String {
+        var parts: [String] = []
+        let ip = receiverIP.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !ip.isEmpty {
+            parts.append("\(TBDisplaySenderL10n.receiverIP(language)) \(ip)")
+        }
+        if !receiverPanelText.isEmpty {
+            parts.append(receiverPanelText)
+        }
+        return parts.joined(separator: "\n")
+    }
+
     @Published var audioEnabled: Bool
     @Published var brightness: Double = 1.0 {
         didSet {
@@ -736,7 +768,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         activeProfile = nil
         activeCodecType = nil
         activeCodecName = nil
-        setStatus(.connecting(receiverIP))
+        setStatus(.connecting(receiverDisplayName))
 
         let tcpOptions = NWProtocolTCP.Options()
         tcpOptions.noDelay = true

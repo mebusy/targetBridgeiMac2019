@@ -257,8 +257,8 @@ private struct TBDisplaySenderSessionCard: View {
 
             summaryTile(
                 title: receiverTitle,
-                value: trimmedReceiverIP.isEmpty ? TBDisplaySenderL10n.notDetected(service.language) : trimmedReceiverIP,
-                subtitle: session.receiverPanelText
+                value: session.receiverDisplayName.isEmpty ? TBDisplaySenderL10n.notDetected(service.language) : session.receiverDisplayName,
+                subtitle: session.receiverSubtitle
             )
 
             summaryTile(

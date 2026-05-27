@@ -9,8 +9,17 @@ struct TBDiscoveredReceiver: Identifiable, Equatable {
     let panelSummary: String
     let version: String
     let supportsHEVCDecode: Bool
+    let hostName: String?
 
     var id: String { "\(serviceName)|\(preferredIP)" }
+
+    var shortHostName: String? {
+        guard let host = hostName, !host.isEmpty else { return nil }
+        let stripped = host.hasSuffix(".") ? String(host.dropLast()) : host
+        let components = stripped.split(separator: ".")
+        guard let first = components.first, !first.isEmpty else { return nil }
+        return String(first)
+    }
 
     func ip(for transportKind: TBTransportKind) -> String {
         switch transportKind {
@@ -34,10 +43,17 @@ struct TBDiscoveredReceiver: Identifiable, Equatable {
             addressSummary = preferredIP
         }
 
-        if panelSummary.isEmpty {
-            return "\(receiverName) · \(addressSummary)"
+        let name: String
+        if let host = shortHostName {
+            name = "\(host) (\(addressSummary))"
+        } else {
+            name = addressSummary
         }
-        return "\(receiverName) · \(addressSummary) · \(panelSummary)"
+
+        if panelSummary.isEmpty {
+            return name
+        }
+        return "\(name) · \(panelSummary)"
     }
 }
 
@@ -121,7 +137,8 @@ final class TBReceiverDiscovery: NSObject, ObservableObject {
             networkIP: networkIP,
             panelSummary: panelSummary,
             version: version,
-            supportsHEVCDecode: supportsHEVCDecode
+            supportsHEVCDecode: supportsHEVCDecode,
+            hostName: service.hostName
         )
 
         if let index = receivers.firstIndex(where: { $0.id == receiver.id }) {

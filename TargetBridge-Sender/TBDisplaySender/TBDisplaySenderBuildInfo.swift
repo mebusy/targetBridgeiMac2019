@@ -1,5 +1,5 @@
 enum TBDisplaySenderBuildInfo {
-    static let marketingVersion = "2.0"
-    static let buildNumber = "20260521211758"
+    static let marketingVersion = "3.0"
+    static let buildNumber = "20260527121356"
     static let versionDisplay = "\(marketingVersion) + build \(buildNumber)"
 }

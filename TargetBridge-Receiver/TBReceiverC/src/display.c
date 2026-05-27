@@ -1233,7 +1233,7 @@ void tb_disp_render_status(struct tb_display *d,
     }
 
     char title[256];
-    snprintf(title, sizeof(title), "TBDisplayReceiverC %s — IP %s — %s", TB_RECEIVER_VERSION, ip, status);
+    snprintf(title, sizeof(title), "TBDisplayReceiverC %s — %s — %s", TB_RECEIVER_VERSION, ip, status);
     SDL_SetWindowTitle(d->win, title);
 
     SDL_RenderClear(d->ren);

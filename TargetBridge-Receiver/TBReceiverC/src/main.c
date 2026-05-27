@@ -57,6 +57,7 @@ struct app {
     char     ip_text[64];
     char     tb_ip_text[64];
     char     net_ip_text[64];
+    char     display_host[128]; /* short hostname (or hostname+IP), cached at startup */
     char     status_text[128];
     char     sender_text[128];
     char     panel_text[128];
@@ -1402,6 +1403,33 @@ static void close_client(struct app *a) {
     fprintf(stderr, "[main] client disconnected\n");
 }
 
+/* Build the display string for the host/IP line of the status screen.
+ * have_ip: non-zero if ip_fallback is a real IP, zero if no IP is available.
+ * Called once at startup (and when the IP changes) to cache the result in
+ * a.display_host — do NOT call gethostname() in the render loop. */
+static void build_display_host(char *buf, size_t bufsz, const char *ip_fallback, int have_ip) {
+    if (!buf || bufsz == 0) return;
+    char host[96] = {0};
+    if (gethostname(host, sizeof(host)) == 0 && host[0] != '\0' && strcmp(host, "localhost") != 0) {
+        char short_host[96] = {0};
+        size_t i = 0;
+        for (; host[i] != '\0' && host[i] != '.' && i + 1 < sizeof(short_host); i++) {
+            short_host[i] = host[i];
+        }
+        short_host[i] = '\0';
+        if (short_host[0] != '\0') {
+            if (have_ip && ip_fallback && ip_fallback[0] != '\0') {
+                snprintf(buf, bufsz, "%s (%s)", short_host, ip_fallback);
+            } else {
+                snprintf(buf, bufsz, "%s", short_host);
+            }
+            return;
+        }
+    }
+    snprintf(buf, bufsz, "%s", (have_ip && ip_fallback && ip_fallback[0] != '\0')
+             ? ip_fallback : tb_i18n_get("receiver.network.not_detected"));
+}
+
 /* ---- Main ------------------------------------------------------------ */
 
 int main(int argc, char **argv) {
@@ -1452,6 +1480,7 @@ int main(int argc, char **argv) {
     snprintf(a.language_pref, sizeof(a.language_pref), "%s", startup_language_pref);
     snprintf(a.input_control_mode, sizeof(a.input_control_mode), "%s", "off");
     tb_refresh_idle_localized_strings(&a);
+    build_display_host(a.display_host, sizeof(a.display_host), a.ip_text, tb_ip[0] || net_ip[0]);
     tb_receiver_apply_language_preference(&a);
 
     a.disp = tb_disp_create(fullscreen);
@@ -1513,13 +1542,17 @@ int main(int argc, char **argv) {
             (void)tb_net_get_tb_ip(refreshed_tb_ip, sizeof(refreshed_tb_ip));
             (void)tb_net_get_lan_ip(refreshed_net_ip, sizeof(refreshed_net_ip));
 
-            const char *preferred_ip = refreshed_tb_ip[0] ? refreshed_tb_ip : (refreshed_net_ip[0] ? refreshed_net_ip : "not detected");
+            const int have_refreshed_ip = refreshed_tb_ip[0] || refreshed_net_ip[0];
+            const char *preferred_ip = refreshed_tb_ip[0] ? refreshed_tb_ip
+                                     : (refreshed_net_ip[0] ? refreshed_net_ip
+                                     : tb_i18n_get("receiver.network.not_detected"));
             if (strcmp(a.tb_ip_text, refreshed_tb_ip) != 0 ||
                 strcmp(a.net_ip_text, refreshed_net_ip) != 0 ||
                 strcmp(a.ip_text, preferred_ip) != 0) {
                 snprintf(a.tb_ip_text, sizeof(a.tb_ip_text), "%s", refreshed_tb_ip);
                 snprintf(a.net_ip_text, sizeof(a.net_ip_text), "%s", refreshed_net_ip);
                 snprintf(a.ip_text, sizeof(a.ip_text), "%s", preferred_ip);
+                build_display_host(a.display_host, sizeof(a.display_host), preferred_ip, have_refreshed_ip);
                 if (refreshed_tb_ip[0] != '\0') {
                     fprintf(stderr, "[main] Thunderbolt Bridge IP = %s\n", refreshed_tb_ip);
                 }
@@ -1554,7 +1587,7 @@ int main(int argc, char **argv) {
 
         if (a.client_fd < 0 || !a.have_video_frame) {
             tb_receiver_refresh_permissions_text(&a);
-            tb_disp_render_status(a.disp, a.ip_text, a.status_text, a.sender_text, a.panel_text, a.mode_text, a.language_text, a.permissions_text);
+            tb_disp_render_status(a.disp, a.display_host, a.status_text, a.sender_text, a.panel_text, a.mode_text, a.language_text, a.permissions_text);
         }
 
         if (strcmp(a.input_control_mode, "receiverMaster") == 0 && a.client_fd >= 0) {
