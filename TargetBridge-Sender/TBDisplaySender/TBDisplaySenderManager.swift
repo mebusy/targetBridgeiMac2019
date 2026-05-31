@@ -20,7 +20,6 @@ final class TBDisplaySenderService: ObservableObject {
         didSet {
             language.persist()
             sessions.forEach { $0.language = language }
-            objectWillChange.send()
         }
     }
     @Published var showsMenuBarIcon = true
@@ -28,7 +27,24 @@ final class TBDisplaySenderService: ObservableObject {
         didSet {
             UserDefaults.standard.set(largeCursor, forKey: "fd.tbdisplaysender.largeCursor")
             sessions.forEach { $0.largeCursor = largeCursor }
-            objectWillChange.send()
+        }
+    }
+    @Published var preventDisplaySleep: Bool = UserDefaults.standard.bool(forKey: "fd.tbdisplaysender.preventDisplaySleep") {
+        didSet {
+            UserDefaults.standard.set(preventDisplaySleep, forKey: "fd.tbdisplaysender.preventDisplaySleep")
+            sessions.forEach { $0.preventDisplaySleep = preventDisplaySleep }
+        }
+    }
+    @Published var autoRestartOnWake: Bool = UserDefaults.standard.bool(forKey: "fd.tbdisplaysender.autoRestartOnWake") {
+        didSet {
+            UserDefaults.standard.set(autoRestartOnWake, forKey: "fd.tbdisplaysender.autoRestartOnWake")
+            sessions.forEach { $0.autoRestartOnWake = autoRestartOnWake }
+        }
+    }
+    @Published var verboseDisplayLogging: Bool = UserDefaults.standard.bool(forKey: "fd.tbdisplaysender.verboseDisplayLogging") {
+        didSet {
+            UserDefaults.standard.set(verboseDisplayLogging, forKey: "fd.tbdisplaysender.verboseDisplayLogging")
+            sessions.forEach { $0.verboseDisplayLogging = verboseDisplayLogging }
         }
     }
 
@@ -40,7 +56,6 @@ final class TBDisplaySenderService: ObservableObject {
         discoveryCancellable = receiverDiscovery.$receivers.sink { [weak self] receivers in
             guard let self else { return }
             discoveredReceivers = receivers
-            objectWillChange.send()
         }
         refreshBridgeInterfaces()
         addSession()
@@ -70,7 +85,13 @@ final class TBDisplaySenderService: ObservableObject {
     }
 
     func addSession() {
-        let session = TBDisplaySenderSession(language: language, largeCursor: largeCursor)
+        let session = TBDisplaySenderSession(
+            language: language,
+            largeCursor: largeCursor,
+            preventDisplaySleep: preventDisplaySleep,
+            autoRestartOnWake: autoRestartOnWake,
+            verboseDisplayLogging: verboseDisplayLogging
+        )
         if let previous = sessions.last {
             session.capturePreset = previous.capturePreset
             session.captureSource = previous.captureSource
@@ -80,7 +101,6 @@ final class TBDisplaySenderService: ObservableObject {
         }
         attachSession(session)
         sessions.append(session)
-        objectWillChange.send()
     }
 
     func removeSession(_ session: TBDisplaySenderSession) {
@@ -89,7 +109,6 @@ final class TBDisplaySenderService: ObservableObject {
         sessions.removeAll { $0.id == session.id }
         sessionCancellables.removeValue(forKey: session.id)
         normalizeSessionInterfaces()
-        objectWillChange.send()
     }
 
     func stopAll() {
@@ -101,7 +120,6 @@ final class TBDisplaySenderService: ObservableObject {
         bridgeInterfaces = detectBridgeInterfaces()
         receiverDiscovery.refresh()
         normalizeSessionInterfaces()
-        objectWillChange.send()
     }
 
     func applyDiscoveredReceiver(_ receiver: TBDiscoveredReceiver, to session: TBDisplaySenderSession) {
@@ -109,7 +127,6 @@ final class TBDisplaySenderService: ObservableObject {
         if session.localTBIP.isEmpty {
             session.localTBIP = suggestedInterfaceForNewSession()?.ip ?? bridgeInterfaces.first?.ip ?? ""
         }
-        objectWillChange.send()
     }
 
     func sessionTitle(for session: TBDisplaySenderSession) -> String {

@@ -163,6 +163,12 @@ struct TBDisplaySenderContentView: View {
 
                 Toggle(TBDisplaySenderL10n.largeCursor(service.language), isOn: $service.largeCursor)
                     .disabled(service.anyConnected)
+
+                Toggle(TBDisplaySenderL10n.preventDisplaySleep(service.language), isOn: $service.preventDisplaySleep)
+
+                Toggle(TBDisplaySenderL10n.autoRestartOnWake(service.language), isOn: $service.autoRestartOnWake)
+
+                Toggle(TBDisplaySenderL10n.verboseDisplayLogging(service.language), isOn: $service.verboseDisplayLogging)
             }
         }
     }
@@ -229,7 +235,11 @@ private struct TBDisplaySenderSessionCard: View {
                         }
                         .onChange(of: session.selectedReceiverID) { _, newValue in
                             guard let receiver = service.discoveredReceivers.first(where: { $0.id == newValue }) else { return }
-                            service.applyDiscoveredReceiver(receiver, to: session)
+                            // Defer the mutation past SwiftUI's current view-update phase to avoid
+                            // "Publishing changes from within view updates is not allowed".
+                            DispatchQueue.main.async {
+                                service.applyDiscoveredReceiver(receiver, to: session)
+                            }
                         }
                         .disabled(session.isConnected || session.isStreaming)
                     }
@@ -336,6 +346,12 @@ private struct TBDisplaySenderSessionCard: View {
                 .buttonStyle(.bordered)
                 .disabled(session.isConnected || session.isStreaming || session.isCableTesting || trimmedReceiverIP.isEmpty || session.localTBIP.isEmpty)
 
+                Button(TBDisplaySenderL10n.restartCaptureButton(service.language)) {
+                    session.restartCaptureNow()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!session.canRestartCapture)
+
                 Button(TBDisplaySenderL10n.removeSessionButton(service.language)) {
                     service.removeSession(session)
                 }
@@ -354,7 +370,9 @@ private struct TBDisplaySenderSessionCard: View {
                     infoRow(TBDisplaySenderL10n.receiverLabel(service.language), session.receiverPanelText)
                     infoRow(TBDisplaySenderL10n.virtualDisplayLabel(service.language), session.virtualDisplayText)
                     infoRow(TBDisplaySenderL10n.streamLabel(service.language), session.streamResolutionText)
-                    infoRow(TBDisplaySenderL10n.fpsLabel(service.language), "\(session.senderFPS)")
+                    // Observes the dedicated metrics object so the ~1 Hz FPS tick
+                    // re-renders only this row, not the whole session card / window.
+                    SessionMonitorFPSRow(label: TBDisplaySenderL10n.fpsLabel(service.language), metrics: session.liveMetrics)
                     infoRow("Capture", session.captureDisplayText)
                     infoRow("State", session.displayStateText)
                 }
@@ -499,6 +517,26 @@ private struct TBDisplaySenderSessionCard: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 138, alignment: .leading)
             Text(value)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// FPS readout that observes only `TBSessionLiveMetrics`. Isolating it here means
+/// the once-per-second FPS update invalidates just this small row instead of the
+/// entire session card (and, via the manager bubble-up, the whole window).
+private struct SessionMonitorFPSRow: View {
+    let label: String
+    @ObservedObject var metrics: TBSessionLiveMetrics
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            Text(label)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 138, alignment: .leading)
+            Text("\(metrics.senderFPS)")
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

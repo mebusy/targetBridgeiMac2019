@@ -480,6 +480,38 @@ enum TBDisplaySenderL10n {
         }
     }
 
+    static func preventDisplaySleep(_ language: TBDisplaySenderLanguage) -> String {
+        switch language {
+        case .italian: return "Impedisci screensaver e sospensione display durante lo streaming"
+        case .english: return "Prevent screensaver / display sleep while streaming"
+        case .german: return "Bildschirmschoner und Display-Ruhezustand beim Streamen verhindern"
+        }
+    }
+
+    static func autoRestartOnWake(_ language: TBDisplaySenderLanguage) -> String {
+        switch language {
+        case .italian: return "Riavvia automaticamente la cattura al risveglio"
+        case .english: return "Auto-restart capture after wake / unlock"
+        case .german: return "Aufnahme nach Aufwachen/Entsperren automatisch neu starten"
+        }
+    }
+
+    static func restartCaptureButton(_ language: TBDisplaySenderLanguage) -> String {
+        switch language {
+        case .italian: return "Riavvia cattura"
+        case .english: return "Restart capture"
+        case .german: return "Aufnahme neu starten"
+        }
+    }
+
+    static func verboseDisplayLogging(_ language: TBDisplaySenderLanguage) -> String {
+        switch language {
+        case .italian: return "Diagnostica display in Console (verboso)"
+        case .english: return "Log virtual display events to Console (verbose)"
+        case .german: return "Virtuelle Display-Ereignisse in Console protokollieren (ausführlich)"
+        }
+    }
+
     static func showMainWindow(_ language: TBDisplaySenderLanguage) -> String {
         switch language {
         case .italian: return "Mostra finestra principale"
