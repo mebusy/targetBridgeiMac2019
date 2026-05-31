@@ -249,12 +249,20 @@ enum TBDisplayCaptureSource: String, CaseIterable, Identifiable {
 }
 
 private final class TBDirectDisplayStreamCapture {
-    private let pipelineRefValue: UInt
+    // Strong reference so the pipeline (and its delivery queue) outlives every
+    // frame callback — a stray frame must never deref a freed pipeline.
+    private let pipeline: TBVideoPipeline
     private let queue: DispatchQueue
     private var stream: CGDisplayStream?
+    // CGDisplayStreamStop is asynchronous: frames already in flight keep arriving
+    // until the stream delivers a final `.stopped` frame, and releasing the
+    // CGDisplayStream before then crashes inside SkyLight's
+    // `_CGYDisplayStreamFrameAvailable`. This self-reference keeps the capture
+    // object (and the stream) alive from stop() until that `.stopped` frame.
+    private var pendingStopRetain: TBDirectDisplayStreamCapture?
 
     init(pipeline: TBVideoPipeline, queue: DispatchQueue) {
-        self.pipelineRefValue = UInt(bitPattern: Unmanaged.passUnretained(pipeline).toOpaque())
+        self.pipeline = pipeline
         self.queue = queue
     }
 
@@ -265,7 +273,6 @@ private final class TBDirectDisplayStreamCapture {
             CGDisplayStream.minimumFrameTime: 1.0 / Double(preset.expectedFrameRate)
         ]
 
-        let pipelineRefValue = self.pipelineRefValue
         let displayStream = CGDisplayStream(
             dispatchQueueDisplay: displayID,
             outputWidth: preset.width,
@@ -273,14 +280,21 @@ private final class TBDirectDisplayStreamCapture {
             pixelFormat: Int32(kCVPixelFormatType_32BGRA),
             properties: properties,
             queue: queue
-        ) { status, displayTime, surface, _ in
-            // This handler is delivered on `queue`, which is the pipeline's own
-            // serial queue — so we run the encode synchronously here, off the
-            // main thread, with no extra hop.
+        ) { [weak self] status, displayTime, surface, _ in
+            // Delivered on `queue` — the pipeline's own serial queue — so encode
+            // runs here, off the main thread, with no extra hop.
+            guard let self else { return }
+            if status == .stopped {
+                // The stream has fully drained; no further frames will arrive, so
+                // it is now safe to release the stream and drop the self-retain.
+                self.stream = nil
+                self.pendingStopRetain = nil
+                return
+            }
             guard status == .frameComplete, let surface else { return }
-            guard let pipelineRef = UnsafeRawPointer(bitPattern: pipelineRefValue) else { return }
-            let pipeline = Unmanaged<TBVideoPipeline>.fromOpaque(pipelineRef).takeUnretainedValue()
-            pipeline.encodeDisplaySurface(surface, displayTime: displayTime)
+            // After pipeline.stop(), encodeDisplaySurface() no-ops on its `running`
+            // guard, so a late in-flight frame here is harmless.
+            self.pipeline.encodeDisplaySurface(surface, displayTime: displayTime)
         }
 
         guard let displayStream, displayStream.start() == .success else {
@@ -292,8 +306,12 @@ private final class TBDirectDisplayStreamCapture {
     }
 
     func stop() {
+        guard stream != nil else { return }
+        // Stay alive until the `.stopped` frame arrives (see pendingStopRetain);
+        // the stream is released in the handler, never here, so it is never freed
+        // with frame events still queued on `queue`.
+        pendingStopRetain = self
         stream?.stop()
-        stream = nil
     }
 }
 
