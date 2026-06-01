@@ -1275,20 +1275,6 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
             should_consume = a->input_tap_consumes_events;
             break;
         }
-        if ((effective_flags & kCGEventFlagMaskControl) &&
-            !(effective_flags & kCGEventFlagMaskAlternate) &&
-            !(effective_flags & kCGEventFlagMaskCommand)) {
-            if (key_code == 123) {
-                tb_receiver_send_space_switch(a, -1);
-                should_consume = a->input_tap_consumes_events;
-                break;
-            }
-            if (key_code == 124) {
-                tb_receiver_send_space_switch(a, 1);
-                should_consume = a->input_tap_consumes_events;
-                break;
-            }
-        }
         if ((effective_flags & kCGEventFlagMaskControl) && (effective_flags & kCGEventFlagMaskAlternate)) {
             if (key_code == 123) {
                 tb_receiver_send_target_switch(a, -1);
@@ -1314,13 +1300,6 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
             (flags & kCGEventFlagMaskAlternate) &&
             (flags & kCGEventFlagMaskCommand) &&
             key_code == 40) {
-            should_consume = a->input_tap_consumes_events;
-            break;
-        }
-        if ((effective_flags & kCGEventFlagMaskControl) &&
-            !(effective_flags & kCGEventFlagMaskAlternate) &&
-            !(effective_flags & kCGEventFlagMaskCommand) &&
-            (key_code == 123 || key_code == 124)) {
             should_consume = a->input_tap_consumes_events;
             break;
         }
