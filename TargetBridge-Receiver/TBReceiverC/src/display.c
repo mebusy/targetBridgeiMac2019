@@ -1153,7 +1153,7 @@ unsigned int tb_disp_poll_actions(struct tb_display *d) {
                         tb_disp_queue_input_event(d, &input_event);
                         break;
                     }
-                    if ((ev.key.keysym.mod & KMOD_CTRL) && (ev.key.keysym.mod & KMOD_ALT)) {
+                    if ((ev.key.keysym.mod & KMOD_CTRL) && (ev.key.keysym.mod & KMOD_GUI)) {
                         if (ev.key.keysym.sym == SDLK_LEFT) {
                             input_event.kind = TB_INPUT_EVENT_SWITCH_PREV_TARGET;
                             tb_disp_queue_input_event(d, &input_event);
@@ -1180,7 +1180,7 @@ unsigned int tb_disp_poll_actions(struct tb_display *d) {
                     ev.key.keysym.sym == SDLK_k) {
                     break;
                 }
-                if ((ev.key.keysym.mod & KMOD_CTRL) && (ev.key.keysym.mod & KMOD_ALT) &&
+                if ((ev.key.keysym.mod & KMOD_CTRL) && (ev.key.keysym.mod & KMOD_GUI) &&
                     (ev.key.keysym.sym == SDLK_LEFT || ev.key.keysym.sym == SDLK_RIGHT)) {
                     break;
                 }

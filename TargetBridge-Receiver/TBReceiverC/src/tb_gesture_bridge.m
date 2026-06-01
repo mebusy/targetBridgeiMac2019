@@ -9,6 +9,7 @@ static id g_scroll_monitor = nil;
 static id g_key_down_monitor = nil;
 static id g_key_up_monitor = nil;
 static id g_flags_monitor = nil;
+static id g_system_defined_monitor = nil;
 static BOOL g_active = NO;
 static NSTimeInterval g_last_horizontal_gesture_at = 0.0;
 static CGFloat g_horizontal_accumulator = 0.0;
@@ -28,7 +29,7 @@ void tb_gesture_bridge_install(tb_gesture_space_switch_callback callback, void *
     g_callback = callback;
     g_context = context;
 
-    if (g_swipe_monitor || g_scroll_monitor || g_key_down_monitor || g_key_up_monitor || g_flags_monitor) {
+    if (g_swipe_monitor || g_scroll_monitor || g_key_down_monitor || g_key_up_monitor || g_flags_monitor || g_system_defined_monitor) {
         return;
     }
 
@@ -77,6 +78,12 @@ void tb_gesture_bridge_install(tb_gesture_space_switch_callback callback, void *
 
     g_flags_monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskFlagsChanged
                                                             handler:^NSEvent * _Nullable(NSEvent * _Nonnull event) {
+        if (!g_active) return event;
+        return nil;
+    }];
+
+    g_system_defined_monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskSystemDefined
+                                                                     handler:^NSEvent * _Nullable(NSEvent * _Nonnull event) {
         if (!g_active) return event;
         return nil;
     }];
