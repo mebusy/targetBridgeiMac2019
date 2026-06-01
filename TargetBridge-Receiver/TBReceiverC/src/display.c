@@ -50,6 +50,7 @@ struct tb_display {
     int           cursor_visible;
     int           cursor_type;
     uint32_t      last_video_frame_time;
+    int           system_cursor_hidden;
 
     char          last_ip[64];
     char          last_status[128];
@@ -391,12 +392,24 @@ static void tb_disp_refresh_window_mode(struct tb_display *d) {
 
     if (d->is_connected && d->preferred_fullscreen) {
         SDL_SetWindowFullscreen(d->win, SDL_WINDOW_FULLSCREEN_DESKTOP);
-        SDL_ShowCursor(SDL_DISABLE);
     } else {
         SDL_SetWindowFullscreen(d->win, 0);
         SDL_SetWindowSize(d->win, 980, 620);
         SDL_SetWindowPosition(d->win, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
-        SDL_ShowCursor(SDL_ENABLE);
+    }
+
+    const int should_hide_cursor =
+        (d->is_connected && d->preferred_fullscreen) ||
+        d->input_capture_active ||
+        d->input_intercept_active;
+
+    SDL_ShowCursor(should_hide_cursor ? SDL_DISABLE : SDL_ENABLE);
+    if (should_hide_cursor && !d->system_cursor_hidden) {
+        CGDisplayHideCursor(CGMainDisplayID());
+        d->system_cursor_hidden = 1;
+    } else if (!should_hide_cursor && d->system_cursor_hidden) {
+        CGDisplayShowCursor(CGMainDisplayID());
+        d->system_cursor_hidden = 0;
     }
 }
 
@@ -499,6 +512,7 @@ struct tb_display *tb_disp_create(int fullscreen) {
     d->cursor_source_h = 1;
     d->cursor_visible = 0;
     d->cursor_type = 0;
+    d->system_cursor_hidden = 0;
     d->last_video_frame_time = 0;
 
     tb_disp_refresh_window_mode(d);
@@ -508,6 +522,10 @@ struct tb_display *tb_disp_create(int fullscreen) {
 
 void tb_disp_destroy(struct tb_display *d) {
     if (!d) return;
+    if (d->system_cursor_hidden) {
+        CGDisplayShowCursor(CGMainDisplayID());
+        d->system_cursor_hidden = 0;
+    }
     tb_disp_destroy_status_texture(d);
     if (d->tex) SDL_DestroyTexture(d->tex);
     if (d->ren) SDL_DestroyRenderer(d->ren);
@@ -1238,11 +1256,13 @@ void tb_disp_set_connection_state(struct tb_display *d, int connected) {
 void tb_disp_set_input_capture_active(struct tb_display *d, int active) {
     if (!d) return;
     d->input_capture_active = active ? 1 : 0;
+    tb_disp_refresh_window_mode(d);
 }
 
 void tb_disp_set_input_intercept_active(struct tb_display *d, int active) {
     if (!d) return;
     d->input_intercept_active = active ? 1 : 0;
+    tb_disp_refresh_window_mode(d);
 }
 
 void tb_disp_render_status(struct tb_display *d,
