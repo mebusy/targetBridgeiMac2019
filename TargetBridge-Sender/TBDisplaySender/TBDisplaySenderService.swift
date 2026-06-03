@@ -563,6 +563,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
             inputRelayActive = (inputControlRole == .senderMaster)
             if inputControlRole != .receiverMaster {
                 injectedRemoteMouseLocation = nil
+                releaseInjectedModifiersIfNeeded()
             }
         }
     }
@@ -604,6 +605,11 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
     private var cursorDisplayID: CGDirectDisplayID = kCGNullDirectDisplay
     private var lastCursorPacket: TBMonitorCursor?
     private var injectedRemoteMouseLocation: CGPoint?
+    private var injectedCommandDown = false
+    private var injectedShiftDown = false
+    private var injectedOptionDown = false
+    private var injectedControlDown = false
+    private var injectedCapsDown = false
     private static var cachedSupportsHEVCHardwareEncode: Bool?
     private var receivedInputEventCount: UInt64 = 0
     var onRemoteSwitchRequest: ((Int) -> Void)?
@@ -1172,14 +1178,19 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
                         TBInputDebugLog.log("sender received #\(receivedInputEventCount) kind=\(event.kind) dx=\(event.dx ?? 0) dy=\(event.dy ?? 0) sx=\(event.scrollX ?? 0) sy=\(event.scrollY ?? 0) key=\(event.keyCode ?? 0)")
                     }
                     if event.kind == "switchPrevTarget" {
+                        releaseInjectedModifiersIfNeeded()
                         onRemoteSwitchRequest?(-1)
                     } else if event.kind == "switchNextTarget" {
+                        releaseInjectedModifiersIfNeeded()
                         onRemoteSwitchRequest?(1)
                     } else if event.kind == "switchPrevSpace" {
+                        releaseInjectedModifiersIfNeeded()
                         postLocalSpaceSwitch(direction: -1)
                     } else if event.kind == "switchNextSpace" {
+                        releaseInjectedModifiersIfNeeded()
                         postLocalSpaceSwitch(direction: 1)
                     } else if event.kind == "deactivateInputControl" {
+                        releaseInjectedModifiersIfNeeded()
                         onRemoteDeactivateInputRequest?()
                     } else {
                         applyIncomingInputEvent(event)
@@ -1289,8 +1300,39 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
 
     private func postLocalKey(keyCode: UInt16, isDown: Bool) {
         logLocalInputInjectionStateIfNeeded(context: "key")
+        switch keyCode {
+        case 54, 55: injectedCommandDown = isDown
+        case 56, 60: injectedShiftDown = isDown
+        case 58, 61: injectedOptionDown = isDown
+        case 59, 62: injectedControlDown = isDown
+        case 57: injectedCapsDown = isDown
+        default: break
+        }
         guard let event = CGEvent(keyboardEventSource: localInputEventSource(), virtualKey: CGKeyCode(keyCode), keyDown: isDown) else { return }
         event.post(tap: .cghidEventTap)
+    }
+
+    private func releaseInjectedModifiersIfNeeded() {
+        if injectedCommandDown {
+            postLocalKey(keyCode: 55, isDown: false)
+            injectedCommandDown = false
+        }
+        if injectedShiftDown {
+            postLocalKey(keyCode: 56, isDown: false)
+            injectedShiftDown = false
+        }
+        if injectedOptionDown {
+            postLocalKey(keyCode: 58, isDown: false)
+            injectedOptionDown = false
+        }
+        if injectedControlDown {
+            postLocalKey(keyCode: 59, isDown: false)
+            injectedControlDown = false
+        }
+        if injectedCapsDown {
+            postLocalKey(keyCode: 57, isDown: false)
+            injectedCapsDown = false
+        }
     }
 
     private func postLocalSpaceSwitch(direction: Int) {
