@@ -91,6 +91,11 @@ struct app {
     uint64_t last_space_switch_ms;
     uint64_t last_space_gesture_ms;
     int      space_gesture_accum_x;
+    int      sent_command_down;
+    int      sent_shift_down;
+    int      sent_option_down;
+    int      sent_control_down;
+    int      sent_caps_down;
     uint64_t last_clipboard_poll_ms;
     char     last_clipboard_text[4096];
 };
@@ -834,6 +839,13 @@ static void tb_receiver_apply_input_control_mode(struct app *a, const uint8_t *p
         snprintf(a->input_control_mode, sizeof(a->input_control_mode), "%s", mode);
     }
     tb_receiver_input_log("[input] control mode updated to %s", a->input_control_mode);
+    if (strcmp(a->input_control_mode, "receiverMaster") != 0) {
+        a->sent_command_down = 0;
+        a->sent_shift_down = 0;
+        a->sent_option_down = 0;
+        a->sent_control_down = 0;
+        a->sent_caps_down = 0;
+    }
     tb_receiver_refresh_input_capture(a);
 }
 
@@ -1125,6 +1137,35 @@ static void tb_receiver_send_target_switch(struct app *a, int direction) {
                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 }
 
+static void tb_receiver_sync_modifier_state(struct app *a,
+                                            int command_down,
+                                            int shift_down,
+                                            int option_down,
+                                            int control_down,
+                                            int caps_down) {
+    if (!a) return;
+
+    struct {
+        int *state;
+        int desired;
+        uint16_t key_code;
+    } modifiers[] = {
+        { &a->sent_command_down, command_down, 55 },
+        { &a->sent_shift_down,   shift_down,   56 },
+        { &a->sent_option_down,  option_down,  58 },
+        { &a->sent_control_down, control_down, 59 },
+        { &a->sent_caps_down,    caps_down,    57 }
+    };
+
+    for (size_t i = 0; i < sizeof(modifiers) / sizeof(modifiers[0]); i++) {
+        if (*modifiers[i].state == modifiers[i].desired) continue;
+        tb_receiver_send_input_event(a,
+                                     modifiers[i].desired ? "keyDown" : "keyUp",
+                                     0, 0, 0, 0, 0, 0, 0, 0, 1, modifiers[i].key_code);
+        *modifiers[i].state = modifiers[i].desired;
+    }
+}
+
 static void tb_receiver_send_space_switch(struct app *a, int direction) {
     tb_receiver_send_input_event(a,
                                  direction < 0 ? "switchPrevSpace" : "switchNextSpace",
@@ -1267,6 +1308,12 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
         uint16_t key_code = (uint16_t)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
         CGEventFlags flags = CGEventGetFlags(event);
         const CGEventFlags effective_flags = flags & ~kCGEventFlagMaskSecondaryFn;
+        tb_receiver_sync_modifier_state(a,
+                                        (effective_flags & kCGEventFlagMaskCommand) != 0,
+                                        (effective_flags & kCGEventFlagMaskShift) != 0,
+                                        (effective_flags & kCGEventFlagMaskAlternate) != 0,
+                                        (effective_flags & kCGEventFlagMaskControl) != 0,
+                                        (effective_flags & kCGEventFlagMaskAlphaShift) != 0);
         if ((flags & kCGEventFlagMaskControl) &&
             (flags & kCGEventFlagMaskAlternate) &&
             (flags & kCGEventFlagMaskCommand) &&
@@ -1296,6 +1343,12 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
         uint16_t key_code = (uint16_t)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
         CGEventFlags flags = CGEventGetFlags(event);
         const CGEventFlags effective_flags = flags & ~kCGEventFlagMaskSecondaryFn;
+        tb_receiver_sync_modifier_state(a,
+                                        (effective_flags & kCGEventFlagMaskCommand) != 0,
+                                        (effective_flags & kCGEventFlagMaskShift) != 0,
+                                        (effective_flags & kCGEventFlagMaskAlternate) != 0,
+                                        (effective_flags & kCGEventFlagMaskControl) != 0,
+                                        (effective_flags & kCGEventFlagMaskAlphaShift) != 0);
         if ((flags & kCGEventFlagMaskControl) &&
             (flags & kCGEventFlagMaskAlternate) &&
             (flags & kCGEventFlagMaskCommand) &&
@@ -1317,7 +1370,14 @@ static CGEventRef tb_receiver_input_tap_callback(CGEventTapProxy proxy,
         int key_down = 0;
         int handled = 1;
         CGEventFlags flags = CGEventGetFlags(event);
+        const CGEventFlags effective_flags = flags & ~kCGEventFlagMaskSecondaryFn;
         should_consume = a->input_tap_consumes_events;
+        tb_receiver_sync_modifier_state(a,
+                                        (effective_flags & kCGEventFlagMaskCommand) != 0,
+                                        (effective_flags & kCGEventFlagMaskShift) != 0,
+                                        (effective_flags & kCGEventFlagMaskAlternate) != 0,
+                                        (effective_flags & kCGEventFlagMaskControl) != 0,
+                                        (effective_flags & kCGEventFlagMaskAlphaShift) != 0);
         switch (key_code) {
         case 54: case 55: key_down = (flags & kCGEventFlagMaskCommand) != 0; break;
         case 56: case 60: key_down = (flags & kCGEventFlagMaskShift) != 0; break;

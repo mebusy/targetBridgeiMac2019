@@ -561,6 +561,9 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
     @Published var inputControlRole: TBInputControlRole = .off {
         didSet {
             inputRelayActive = (inputControlRole == .senderMaster)
+            if inputControlRole != .receiverMaster {
+                injectedRemoteMouseLocation = nil
+            }
         }
     }
     @Published var inputGestureMode: TBInputGestureMode = .native
@@ -600,6 +603,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
     private var baselineDisplayIDs = Set<CGDirectDisplayID>()
     private var cursorDisplayID: CGDirectDisplayID = kCGNullDirectDisplay
     private var lastCursorPacket: TBMonitorCursor?
+    private var injectedRemoteMouseLocation: CGPoint?
     private static var cachedSupportsHEVCHardwareEncode: Bool?
     private var receivedInputEventCount: UInt64 = 0
     var onRemoteSwitchRequest: ((Int) -> Void)?
@@ -1237,8 +1241,9 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
 
     private func postLocalMouseMove(dx: Int, dy: Int, type: CGEventType = .mouseMoved, button: CGMouseButton = .left) {
         logLocalInputInjectionStateIfNeeded(context: "mouseMove")
-        guard let current = currentLocalMouseLocation() else { return }
+        guard let current = injectedRemoteMouseLocation ?? currentLocalMouseLocation() else { return }
         let target = clampedMouseTarget(from: current, dx: dx, dy: dy)
+        injectedRemoteMouseLocation = target
         let shouldWarp = (type == .mouseMoved)
         if shouldWarp {
             CGWarpMouseCursorPosition(target)
@@ -1264,7 +1269,7 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
 
     private func postLocalMouseButton(type: CGEventType, button: CGMouseButton) {
         logLocalInputInjectionStateIfNeeded(context: "mouseButton")
-        guard let current = currentLocalMouseLocation() else { return }
+        guard let current = injectedRemoteMouseLocation ?? currentLocalMouseLocation() else { return }
         guard let event = CGEvent(mouseEventSource: localInputEventSource(), mouseType: type, mouseCursorPosition: current, mouseButton: button) else { return }
         event.post(tap: .cghidEventTap)
     }
