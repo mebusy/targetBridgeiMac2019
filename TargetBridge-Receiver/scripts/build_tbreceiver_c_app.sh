@@ -8,7 +8,7 @@ BUILD_DIR="${REPO_ROOT}/build"
 APP_DIR="${BUILD_DIR}/TargetBridge Receiver.app"
 BIN_NAME="TargetBridgeReceiver"
 APP_NAME="TargetBridge Receiver"
-APP_VERSION="0.1.0-rc1"
+APP_VERSION="3.0"
 STAMP="$(date +%Y%m%d%H%M%S)"
 ARCH="$(uname -m)"
 ICONSET_DIR="$(mktemp -d)"
@@ -21,10 +21,11 @@ make APP_VERSION="${APP_VERSION}" APP_BUILD="$STAMP"
 
 mkdir -p "$BUILD_DIR"
 rm -rf "$APP_DIR"
-mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" "$APP_DIR/Contents/Resources/Languages"
 
 cp "$ROOT/TBReceiverC/tbreceiver" "$APP_DIR/Contents/MacOS/$BIN_NAME"
 chmod +x "$APP_DIR/Contents/MacOS/$BIN_NAME"
+cp "$REPO_ROOT/TargetBridge-Shared/Languages/"*.json "$APP_DIR/Contents/Resources/Languages/"
 
 # Bundle dylib dependencies (ffmpeg, SDL2) inside the .app
 mkdir -p "$APP_DIR/Contents/Frameworks"

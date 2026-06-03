@@ -1,0 +1,13 @@
+{
+  "id": "targetbridge.input-dockstation",
+  "name": "Input Dockstation",
+  "version": "3.0",
+  "summary": "Forward keyboard and mouse input from the sender to one connected receiver session.",
+  "author": "TargetBridge",
+  "minimumSenderVersion": "3.0",
+  "capabilities": [
+    "input-dockstation"
+  ],
+  "experimental": true,
+  "defaultEnabled": false
+}

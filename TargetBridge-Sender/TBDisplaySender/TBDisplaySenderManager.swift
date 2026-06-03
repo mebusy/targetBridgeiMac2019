@@ -1,12 +1,39 @@
+import AppKit
+import ApplicationServices
 import Combine
 import Foundation
+import Network
 
-struct TBLocalBridgeInterface: Identifiable, Hashable {
+enum TBTransportKind: String, CaseIterable, Identifiable {
+    case thunderboltBridge
+    case networkLink
+
+    var id: String { rawValue }
+
+    func title(_ language: TBDisplaySenderLanguage) -> String {
+        switch (self, language) {
+        case (.thunderboltBridge, .italian): return "Thunderbolt Bridge"
+        case (.thunderboltBridge, .english): return "Thunderbolt Bridge"
+        case (.thunderboltBridge, .german): return "Thunderbolt Bridge"
+        case (.thunderboltBridge, .chinese): return "Thunderbolt Bridge"
+        case (.networkLink, .italian): return "Network Link (sperimentale)"
+        case (.networkLink, .english): return "Network Link (experimental)"
+        case (.networkLink, .german): return "Network Link (experimentell)"
+        case (.networkLink, .chinese): return "Network Link（实验性）"
+        }
+    }
+}
+
+struct TBLocalLinkInterface: Identifiable, Hashable {
     let name: String
     let ip: String
+    let transportKind: TBTransportKind
 
-    var id: String { "\(name)|\(ip)" }
-    var displayText: String { "\(name) · \(ip)" }
+    var id: String { "\(transportKind.rawValue)|\(name)|\(ip)" }
+
+    func displayText(_ language: TBDisplaySenderLanguage) -> String {
+        "\(name) · \(ip) · \(transportKind.title(language))"
+    }
 }
 
 @MainActor
@@ -14,12 +41,15 @@ final class TBDisplaySenderService: ObservableObject {
     static let shared = TBDisplaySenderService()
 
     @Published var sessions: [TBDisplaySenderSession] = []
-    @Published private(set) var bridgeInterfaces: [TBLocalBridgeInterface] = []
+    @Published private(set) var localInterfaces: [TBLocalLinkInterface] = []
     @Published private(set) var discoveredReceivers: [TBDiscoveredReceiver] = []
+    @Published private(set) var addons: [TBAddonRecord] = []
     @Published var language: TBDisplaySenderLanguage = .load() {
         didSet {
             language.persist()
             sessions.forEach { $0.language = language }
+            pushLanguageUpdateToDiscoveredReceivers()
+            objectWillChange.send()
         }
     }
     @Published var showsMenuBarIcon = true
@@ -27,38 +57,72 @@ final class TBDisplaySenderService: ObservableObject {
         didSet {
             UserDefaults.standard.set(largeCursor, forKey: "fd.tbdisplaysender.largeCursor")
             sessions.forEach { $0.largeCursor = largeCursor }
+            objectWillChange.send()
         }
     }
-    @Published var preventDisplaySleep: Bool = UserDefaults.standard.bool(forKey: "fd.tbdisplaysender.preventDisplaySleep") {
+    @Published var preventDisplaySleep: Bool = {
+        if UserDefaults.standard.object(forKey: "fd.tbdisplaysender.preventDisplaySleep") == nil {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: "fd.tbdisplaysender.preventDisplaySleep")
+    }() {
         didSet {
             UserDefaults.standard.set(preventDisplaySleep, forKey: "fd.tbdisplaysender.preventDisplaySleep")
             sessions.forEach { $0.preventDisplaySleep = preventDisplaySleep }
+            objectWillChange.send()
         }
     }
-    @Published var autoRestartOnWake: Bool = UserDefaults.standard.bool(forKey: "fd.tbdisplaysender.autoRestartOnWake") {
+    @Published var autoRestartOnWake: Bool = {
+        if UserDefaults.standard.object(forKey: "fd.tbdisplaysender.autoRestartOnWake") == nil {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: "fd.tbdisplaysender.autoRestartOnWake")
+    }() {
         didSet {
             UserDefaults.standard.set(autoRestartOnWake, forKey: "fd.tbdisplaysender.autoRestartOnWake")
             sessions.forEach { $0.autoRestartOnWake = autoRestartOnWake }
+            objectWillChange.send()
         }
     }
     @Published var verboseDisplayLogging: Bool = UserDefaults.standard.bool(forKey: "fd.tbdisplaysender.verboseDisplayLogging") {
         didSet {
             UserDefaults.standard.set(verboseDisplayLogging, forKey: "fd.tbdisplaysender.verboseDisplayLogging")
             sessions.forEach { $0.verboseDisplayLogging = verboseDisplayLogging }
+            objectWillChange.send()
         }
     }
-
+    @Published var audioEnabled: Bool = UserDefaults.standard.object(forKey: "fd.tbdisplaysender.audioEnabled") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(audioEnabled, forKey: "fd.tbdisplaysender.audioEnabled")
+            objectWillChange.send()
+        }
+    }
     private var sessionCancellables: [UUID: AnyCancellable] = [:]
     private let receiverDiscovery = TBReceiverDiscovery()
+    private let addonStore = TBAddonStore.shared
+    private let inputRelayController = TBInputRelayController()
     private var discoveryCancellable: AnyCancellable?
+    private var addonCancellable: AnyCancellable?
+    private var clipboardTimer: Timer?
+    private var lastClipboardChangeCount: Int = NSPasteboard.general.changeCount
 
     private init() {
         discoveryCancellable = receiverDiscovery.$receivers.sink { [weak self] receivers in
             guard let self else { return }
             discoveredReceivers = receivers
+            pushLanguageUpdateToDiscoveredReceivers()
+            objectWillChange.send()
         }
-        refreshBridgeInterfaces()
+        addonCancellable = addonStore.$addons.sink { [weak self] addons in
+            guard let self else { return }
+            self.addons = addons
+            normalizeAddonState()
+            objectWillChange.send()
+        }
+        refreshLocalInterfaces()
+        addonStore.refresh()
         addSession()
+        startClipboardMonitoring()
     }
 
     var anyConnected: Bool {
@@ -77,11 +141,54 @@ final class TBDisplaySenderService: ObservableObject {
         }
     }
 
-    var bridgeSummaryText: String {
-        guard !bridgeInterfaces.isEmpty else {
+    var localInterfaceSummaryText: String {
+        guard !localInterfaces.isEmpty else {
             return TBDisplaySenderL10n.notDetected(language)
         }
-        return bridgeInterfaces.map(\.displayText).joined(separator: "   ")
+        return localInterfaces
+            .map { $0.displayText(language) }
+            .joined(separator: "   ")
+    }
+
+    var availableTransportKinds: [TBTransportKind] {
+        TBTransportKind.allCases.filter { transportKind in
+            switch transportKind {
+            case .thunderboltBridge:
+                return true
+            case .networkLink:
+                return isAddonCapabilityEnabled(.networkLink)
+            }
+        }
+    }
+
+    var audioRelayAvailable: Bool {
+        isAddonCapabilityEnabled(.audioRelay)
+    }
+
+    var inputDockstationAvailable: Bool {
+        isAddonCapabilityEnabled(.inputDockstation)
+    }
+
+    var localInputInjectionTrusted: Bool {
+        AXIsProcessTrusted()
+    }
+
+    var localInputMonitoringTrusted: Bool {
+        CGPreflightListenEventAccess()
+    }
+
+    func openAccessibilitySettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    func openInputMonitoringSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     func addSession() {
@@ -90,17 +197,23 @@ final class TBDisplaySenderService: ObservableObject {
             largeCursor: largeCursor,
             preventDisplaySleep: preventDisplaySleep,
             autoRestartOnWake: autoRestartOnWake,
+            audioEnabled: audioEnabled && audioRelayAvailable,
             verboseDisplayLogging: verboseDisplayLogging
         )
         if let previous = sessions.last {
             session.capturePreset = previous.capturePreset
             session.captureSource = previous.captureSource
+            session.transportKind = previous.transportKind
+            session.audioEnabled = audioRelayAvailable && previous.audioEnabled
+            session.inputGestureMode = previous.inputGestureMode
         }
-        if let suggestedInterface = suggestedInterfaceForNewSession() {
-            session.localTBIP = suggestedInterface.ip
+        session.audioAddonAvailable = audioRelayAvailable
+        if let suggestedInterface = suggestedInterfaceForNewSession(transportKind: session.transportKind) {
+            session.localInterfaceIP = suggestedInterface.ip
         }
         attachSession(session)
         sessions.append(session)
+        objectWillChange.send()
     }
 
     func removeSession(_ session: TBDisplaySenderSession) {
@@ -108,7 +221,9 @@ final class TBDisplaySenderService: ObservableObject {
         session.stop()
         sessions.removeAll { $0.id == session.id }
         sessionCancellables.removeValue(forKey: session.id)
+        normalizeAddonState()
         normalizeSessionInterfaces()
+        objectWillChange.send()
     }
 
     func stopAll() {
@@ -116,17 +231,22 @@ final class TBDisplaySenderService: ObservableObject {
         sessions.forEach { $0.stop(persistArrangement: false) }
     }
 
-    func refreshBridgeInterfaces() {
-        bridgeInterfaces = detectBridgeInterfaces()
+    func refreshLocalInterfaces() {
+        localInterfaces = detectLocalInterfaces()
         receiverDiscovery.refresh()
         normalizeSessionInterfaces()
+        objectWillChange.send()
     }
 
     func applyDiscoveredReceiver(_ receiver: TBDiscoveredReceiver, to session: TBDisplaySenderSession) {
-        session.receiverIP = receiver.receiverIP
-        if session.localTBIP.isEmpty {
-            session.localTBIP = suggestedInterfaceForNewSession()?.ip ?? bridgeInterfaces.first?.ip ?? ""
+        session.receiverIP = receiver.ip(for: session.transportKind)
+        session.receiverSupportsHEVCDecodeHint = receiver.supportsHEVCDecode
+        if session.localInterfaceIP.isEmpty {
+            session.localInterfaceIP = suggestedInterfaceForNewSession(transportKind: session.transportKind)?.ip
+                ?? availableInterfaces(for: session.transportKind).first?.ip
+                ?? ""
         }
+        objectWillChange.send()
     }
 
     func sessionTitle(for session: TBDisplaySenderSession) -> String {
@@ -135,7 +255,51 @@ final class TBDisplaySenderService: ObservableObject {
     }
 
     func interfaceDisplayText(for ip: String) -> String {
-        bridgeInterfaces.first(where: { $0.ip == ip })?.displayText ?? ip
+        localInterfaces.first(where: { $0.ip == ip })?.displayText(language) ?? ip
+    }
+
+    func availableInterfaces(for transportKind: TBTransportKind) -> [TBLocalLinkInterface] {
+        localInterfaces.filter { $0.transportKind == transportKind }
+    }
+
+    func defaultLocalInterfaceIP(for transportKind: TBTransportKind) -> String {
+        suggestedInterfaceForNewSession(transportKind: transportKind)?.ip
+            ?? availableInterfaces(for: transportKind).first?.ip
+            ?? ""
+    }
+
+    func transportDidChange(for session: TBDisplaySenderSession) {
+        session.localInterfaceIP = defaultLocalInterfaceIP(for: session.transportKind)
+        if let receiver = discoveredReceivers.first(where: { $0.id == session.selectedReceiverID }) {
+            session.receiverIP = receiver.ip(for: session.transportKind)
+        }
+        objectWillChange.send()
+    }
+
+    func refreshAddons() {
+        addonStore.refresh()
+    }
+
+    func openAddonsFolder() {
+        addonStore.openAddonsFolder()
+    }
+
+    func importAddonManifest(from url: URL) throws {
+        _ = try addonStore.importManifest(from: url)
+        normalizeAddonState()
+    }
+
+    func isAddonEnabled(_ addon: TBAddonRecord) -> Bool {
+        addonStore.isEnabled(addon)
+    }
+
+    func setAddonEnabled(_ enabled: Bool, for addon: TBAddonRecord) {
+        addonStore.setEnabled(enabled, for: addon)
+        normalizeAddonState()
+    }
+
+    func isAddonCompatible(_ addon: TBAddonRecord) -> Bool {
+        addonStore.isCompatible(addon)
     }
 
     func summaryStatusText() -> String {
@@ -149,32 +313,228 @@ final class TBDisplaySenderService: ObservableObject {
     }
 
     private func attachSession(_ session: TBDisplaySenderSession) {
+        session.audioAddonAvailable = audioRelayAvailable
+        session.onRemoteSwitchRequest = { [weak self, weak session] direction in
+            guard let self, let session else { return }
+            self.switchReceiverMasterTarget(from: session, direction: direction)
+        }
+        session.onRemoteDeactivateInputRequest = { [weak self, weak session] in
+            guard let self, let session else { return }
+            self.setInputControlRole(.off, for: session)
+        }
         sessionCancellables[session.id] = session.objectWillChange.sink { [weak self] _ in
+            self?.updateInputRelayController()
             self?.objectWillChange.send()
         }
     }
 
-    private func suggestedInterfaceForNewSession() -> TBLocalBridgeInterface? {
-        let usedIPs = Set(sessions.map(\.localTBIP).filter { !$0.isEmpty })
-        return bridgeInterfaces.first(where: { !usedIPs.contains($0.ip) }) ?? bridgeInterfaces.first
+    func isInputRelayActive(for session: TBDisplaySenderSession) -> Bool {
+        session.inputControlRole != .off
     }
 
-    private func normalizeSessionInterfaces() {
-        let validIPs = Set(bridgeInterfaces.map(\.ip))
-        let fallbackIP = bridgeInterfaces.first?.ip ?? ""
+    func setInputControlRole(_ role: TBInputControlRole, for session: TBDisplaySenderSession) {
+        for candidate in sessions {
+            if candidate.id == session.id {
+                candidate.inputControlRole = role
+            } else if role != .off {
+                candidate.inputControlRole = .off
+            }
+        }
+        updateInputRelayController()
+        sessions.forEach { $0.updateInputControlMode() }
+        objectWillChange.send()
+    }
+
+    func switchSenderMasterTarget(direction: Int) {
+        let connected = sessions.filter { $0.isConnected || $0.isStreaming }
+        guard connected.count > 1,
+              let current = connected.first(where: { $0.inputControlRole == .senderMaster }),
+              let currentIndex = connected.firstIndex(where: { $0.id == current.id })
+        else {
+            return
+        }
+
+        let nextIndex = (currentIndex + (direction >= 0 ? 1 : connected.count - 1)) % connected.count
+        let next = connected[nextIndex]
+        guard next.id != current.id else { return }
+
+        for candidate in sessions {
+            candidate.inputControlRole = (candidate.id == next.id) ? .senderMaster : .off
+        }
+        updateInputRelayController()
+        sessions.forEach { $0.updateInputControlMode() }
+        objectWillChange.send()
+    }
+
+    func switchReceiverMasterTarget(from session: TBDisplaySenderSession, direction: Int) {
+        let connected = sessions.filter { $0.isConnected || $0.isStreaming }
+        guard connected.count > 1,
+              let currentIndex = connected.firstIndex(where: { $0.id == session.id })
+        else {
+            return
+        }
+
+        let nextIndex = (currentIndex + (direction >= 0 ? 1 : connected.count - 1)) % connected.count
+        let next = connected[nextIndex]
+        guard next.id != session.id else { return }
+
+        for candidate in sessions {
+            candidate.inputControlRole = (candidate.id == next.id) ? .receiverMaster : .off
+        }
+        updateInputRelayController()
+        sessions.forEach { $0.updateInputControlMode() }
+        objectWillChange.send()
+    }
+
+    private func isAddonCapabilityEnabled(_ capability: TBAddonCapability) -> Bool {
+        addonStore.isCapabilityEnabled(capability)
+    }
+
+    private func normalizeAddonState() {
+        let networkLinkEnabled = isAddonCapabilityEnabled(.networkLink)
+        let audioEnabled = audioRelayAvailable
+        let inputEnabled = inputDockstationAvailable
+
         for session in sessions {
-            if session.localTBIP.isEmpty || !validIPs.contains(session.localTBIP) {
-                session.localTBIP = fallbackIP
+            session.audioAddonAvailable = audioEnabled
+            if !audioEnabled {
+                session.audioEnabled = false
+            }
+            if !networkLinkEnabled, session.transportKind == .networkLink {
+                session.transportKind = .thunderboltBridge
+            }
+            if !inputEnabled {
+                session.inputControlRole = .off
+                session.inputGestureMode = .native
+            }
+        }
+
+        normalizeSessionInterfaces()
+        updateInputRelayController()
+        sessions.forEach { $0.updateInputControlMode() }
+    }
+
+    private func updateInputRelayController() {
+        guard inputDockstationAvailable,
+              let session = sessions.first(where: { $0.inputControlRole == .senderMaster })
+        else {
+            inputRelayController.stop()
+            return
+        }
+
+        inputRelayController.start(
+            gestureMode: session.inputGestureMode,
+            handler: { [weak self] relayEvent in
+                guard let self,
+                      session.isConnected
+                else { return }
+                session.sendInputEvent(relayEvent)
+            },
+            switchHandler: { [weak self] direction in
+                self?.switchSenderMasterTarget(direction: direction)
+            },
+            deactivateHandler: { [weak self, weak session] in
+                guard let self, let session else { return }
+                self.setInputControlRole(.off, for: session)
+            }
+        )
+    }
+
+    private func startClipboardMonitoring() {
+        clipboardTimer?.invalidate()
+        clipboardTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.pollClipboardIfNeeded()
             }
         }
     }
 
-    private func detectBridgeInterfaces() -> [TBLocalBridgeInterface] {
+    private func pollClipboardIfNeeded() {
+        guard let session = sessions.first(where: { $0.inputControlRole == .senderMaster && ($0.isConnected || $0.isStreaming) }) else {
+            lastClipboardChangeCount = NSPasteboard.general.changeCount
+            return
+        }
+
+        let pasteboard = NSPasteboard.general
+        guard pasteboard.changeCount != lastClipboardChangeCount else { return }
+        lastClipboardChangeCount = pasteboard.changeCount
+
+        guard let text = pasteboard.string(forType: .string) else { return }
+        session.sendClipboardText(text)
+    }
+
+    private func suggestedInterfaceForNewSession(transportKind: TBTransportKind) -> TBLocalLinkInterface? {
+        let candidates = availableInterfaces(for: transportKind)
+        let usedIPs = Set(
+            sessions
+                .filter { $0.transportKind == transportKind }
+                .map(\.localInterfaceIP)
+                .filter { !$0.isEmpty }
+        )
+        return candidates.first(where: { !usedIPs.contains($0.ip) }) ?? candidates.first
+    }
+
+    private func normalizeSessionInterfaces() {
+        for session in sessions {
+            let available = availableInterfaces(for: session.transportKind)
+            let validIPs = Set(available.map(\.ip))
+            let fallbackIP = suggestedInterfaceForNewSession(transportKind: session.transportKind)?.ip
+                ?? available.first?.ip
+                ?? ""
+            if session.localInterfaceIP.isEmpty || !validIPs.contains(session.localInterfaceIP) {
+                session.localInterfaceIP = fallbackIP
+            }
+        }
+    }
+
+    private func pushLanguageUpdateToDiscoveredReceivers() {
+        let receivers = discoveredReceivers
+        let languageCode = language.fileStem
+        for receiver in receivers {
+            let candidateIPs = [receiver.preferredIP, receiver.thunderboltIP, receiver.networkIP]
+            var sentTo = Set<String>()
+            for ip in candidateIPs where !ip.isEmpty && sentTo.insert(ip).inserted {
+                sendLanguageUpdate(to: ip, languageCode: languageCode)
+            }
+        }
+    }
+
+    private func sendLanguageUpdate(to receiverIP: String, languageCode: String) {
+        guard !receiverIP.isEmpty,
+              let packet = TBMonitorProtocol.makeJSONPacket(
+                type: .uiLanguage,
+                value: TBMonitorUILanguageUpdate(uiLanguage: languageCode)
+              )
+        else { return }
+
+        let connection = NWConnection(
+            host: NWEndpoint.Host(receiverIP),
+            port: NWEndpoint.Port(rawValue: TBMonitorProtocol.port)!,
+            using: .tcp
+        )
+
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                connection.send(content: packet, completion: .contentProcessed { _ in
+                    connection.cancel()
+                })
+            case .failed, .cancelled:
+                connection.cancel()
+            default:
+                break
+            }
+        }
+
+        connection.start(queue: DispatchQueue.global(qos: .utility))
+    }
+
+    private func detectLocalInterfaces() -> [TBLocalLinkInterface] {
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&ifaddr) == 0 else { return [] }
         defer { freeifaddrs(ifaddr) }
 
-        var interfaces: [TBLocalBridgeInterface] = []
+        var interfaces: [TBLocalLinkInterface] = []
         var pointer = ifaddr
         while let iface = pointer {
             defer { pointer = iface.pointee.ifa_next }
@@ -182,7 +542,8 @@ final class TBDisplaySenderService: ObservableObject {
                   sa.pointee.sa_family == UInt8(AF_INET)
             else { continue }
             let name = String(cString: iface.pointee.ifa_name)
-            guard name.hasPrefix("bridge") else { continue }
+            let flags = Int32(iface.pointee.ifa_flags)
+            guard (flags & IFF_UP) != 0, (flags & IFF_LOOPBACK) == 0 else { continue }
             var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             guard getnameinfo(
                 sa,
@@ -194,15 +555,52 @@ final class TBDisplaySenderService: ObservableObject {
                 NI_NUMERICHOST
             ) == 0 else { continue }
             let ip = String(cString: buffer)
-            guard ip.hasPrefix("169.254.") else { continue }
-            interfaces.append(TBLocalBridgeInterface(name: name, ip: ip))
+            if name.hasPrefix("bridge"), ip.hasPrefix("169.254.") {
+                interfaces.append(TBLocalLinkInterface(name: name, ip: ip, transportKind: .thunderboltBridge))
+                continue
+            }
+
+            guard isLikelyLocalNetworkInterfaceName(name),
+                  isLikelyLANIPv4(ip)
+            else { continue }
+
+            interfaces.append(TBLocalLinkInterface(name: name, ip: ip, transportKind: .networkLink))
         }
 
         return interfaces.sorted {
-            if $0.name == $1.name {
+            if $0.transportKind == $1.transportKind, $0.name == $1.name {
                 return $0.ip < $1.ip
             }
-            return $0.name < $1.name
+            if $0.transportKind == $1.transportKind {
+                return $0.name < $1.name
+            }
+            return $0.transportKind.rawValue < $1.transportKind.rawValue
         }
+    }
+
+    private func isLikelyLocalNetworkInterfaceName(_ name: String) -> Bool {
+        if name.hasPrefix("lo") || name.hasPrefix("utun") || name.hasPrefix("awdl") || name.hasPrefix("llw") {
+            return false
+        }
+        return name.hasPrefix("en")
+            || name.hasPrefix("eth")
+            || name.hasPrefix("bridge")
+    }
+
+    private func isLikelyLANIPv4(_ ip: String) -> Bool {
+        if ip.hasPrefix("169.254.") || ip.hasPrefix("127.") {
+            return false
+        }
+        if ip.hasPrefix("10.") || ip.hasPrefix("192.168.") {
+            return true
+        }
+        let components = ip.split(separator: ".")
+        guard components.count == 4,
+              let first = Int(components[0]),
+              let second = Int(components[1])
+        else {
+            return false
+        }
+        return first == 172 && (16...31).contains(second)
     }
 }

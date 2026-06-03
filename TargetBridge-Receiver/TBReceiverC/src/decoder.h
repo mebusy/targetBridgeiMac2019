@@ -20,6 +20,7 @@ struct tb_decoder;
 
 struct tb_decoder *tb_dec_create(tb_frame_cb cb, void *ud);
 void               tb_dec_destroy(struct tb_decoder *d);
+int                tb_dec_supports_hevc_hwdecode(void);
 
 /* Reset decoder state on client disconnect.
  * Forces re-open on next param sets so a stale FFmpeg context doesn't

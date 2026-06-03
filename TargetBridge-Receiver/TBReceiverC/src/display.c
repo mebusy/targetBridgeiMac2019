@@ -1,23 +1,26 @@
 /* display.c — SDL2 NV12 renderer.
  *
- * SDL2 on macOS uses Metal renderer by default (SDL_RENDERER_ACCELERATED).
+ * On macOS we allow renderer selection/override, but keep OpenGL as the
+ * default safe backend because Metal can flicker on some Tahoe-era systems.
  * SDL_PIXELFORMAT_NV12 + SDL_UpdateNVTexture lets us upload YUV planes
  * directly to GPU; the shader does YUV→RGB conversion on the GPU.
  */
 
 #include "display.h"
+#include "tb_i18n.h"
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <CoreText/CoreText.h>
 #include <SDL.h>
+#include <dlfcn.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #ifndef TB_RECEIVER_VERSION
-#define TB_RECEIVER_VERSION "0.1.0-rc1"
+#define TB_RECEIVER_VERSION "3.0"
 #endif
 
 #ifndef TB_RECEIVER_BUILD
@@ -33,20 +36,156 @@ struct tb_display {
     int           quit;
     int           preferred_fullscreen;
     int           is_connected;
+    int           input_capture_active;
+    int           input_intercept_active;
+    struct tb_input_event input_events[128];
+    int           input_head;
+    int           input_tail;
+    uint32_t      last_target_switch_tick;
+    uint32_t      last_space_switch_tick;
+    uint32_t      last_space_gesture_tick;
+    int           space_gesture_accum_x;
     int           cursor_x, cursor_y;
     int           cursor_source_w, cursor_source_h;
     int           cursor_visible;
     int           cursor_type;
     uint32_t      last_video_frame_time;
+    int           system_cursor_hidden;
 
     char          last_ip[64];
     char          last_status[128];
     char          last_sender[128];
     char          last_panel[128];
     char          last_mode[128];
+    char          last_language[96];
+    char          last_permissions[160];
     int           last_drawable_w;
     int           last_drawable_h;
 };
+
+static uint16_t tb_disp_mac_keycode_for_sdl_scancode(SDL_Scancode scancode) {
+    switch (scancode) {
+    case SDL_SCANCODE_A: return 0x00;
+    case SDL_SCANCODE_S: return 0x01;
+    case SDL_SCANCODE_D: return 0x02;
+    case SDL_SCANCODE_F: return 0x03;
+    case SDL_SCANCODE_H: return 0x04;
+    case SDL_SCANCODE_G: return 0x05;
+    case SDL_SCANCODE_Z: return 0x06;
+    case SDL_SCANCODE_X: return 0x07;
+    case SDL_SCANCODE_C: return 0x08;
+    case SDL_SCANCODE_V: return 0x09;
+    case SDL_SCANCODE_B: return 0x0B;
+    case SDL_SCANCODE_Q: return 0x0C;
+    case SDL_SCANCODE_W: return 0x0D;
+    case SDL_SCANCODE_E: return 0x0E;
+    case SDL_SCANCODE_R: return 0x0F;
+    case SDL_SCANCODE_Y: return 0x10;
+    case SDL_SCANCODE_T: return 0x11;
+    case SDL_SCANCODE_1: return 0x12;
+    case SDL_SCANCODE_2: return 0x13;
+    case SDL_SCANCODE_3: return 0x14;
+    case SDL_SCANCODE_4: return 0x15;
+    case SDL_SCANCODE_6: return 0x16;
+    case SDL_SCANCODE_5: return 0x17;
+    case SDL_SCANCODE_EQUALS: return 0x18;
+    case SDL_SCANCODE_9: return 0x19;
+    case SDL_SCANCODE_7: return 0x1A;
+    case SDL_SCANCODE_MINUS: return 0x1B;
+    case SDL_SCANCODE_8: return 0x1C;
+    case SDL_SCANCODE_0: return 0x1D;
+    case SDL_SCANCODE_RIGHTBRACKET: return 0x1E;
+    case SDL_SCANCODE_O: return 0x1F;
+    case SDL_SCANCODE_U: return 0x20;
+    case SDL_SCANCODE_LEFTBRACKET: return 0x21;
+    case SDL_SCANCODE_I: return 0x22;
+    case SDL_SCANCODE_P: return 0x23;
+    case SDL_SCANCODE_RETURN: return 0x24;
+    case SDL_SCANCODE_L: return 0x25;
+    case SDL_SCANCODE_J: return 0x26;
+    case SDL_SCANCODE_APOSTROPHE: return 0x27;
+    case SDL_SCANCODE_K: return 0x28;
+    case SDL_SCANCODE_SEMICOLON: return 0x29;
+    case SDL_SCANCODE_BACKSLASH: return 0x2A;
+    case SDL_SCANCODE_COMMA: return 0x2B;
+    case SDL_SCANCODE_SLASH: return 0x2C;
+    case SDL_SCANCODE_N: return 0x2D;
+    case SDL_SCANCODE_M: return 0x2E;
+    case SDL_SCANCODE_PERIOD: return 0x2F;
+    case SDL_SCANCODE_TAB: return 0x30;
+    case SDL_SCANCODE_SPACE: return 0x31;
+    case SDL_SCANCODE_GRAVE: return 0x32;
+    case SDL_SCANCODE_BACKSPACE: return 0x33;
+    case SDL_SCANCODE_ESCAPE: return 0x35;
+    case SDL_SCANCODE_LGUI: return 0x37;
+    case SDL_SCANCODE_LSHIFT: return 0x38;
+    case SDL_SCANCODE_CAPSLOCK: return 0x39;
+    case SDL_SCANCODE_LALT: return 0x3A;
+    case SDL_SCANCODE_LCTRL: return 0x3B;
+    case SDL_SCANCODE_RSHIFT: return 0x3C;
+    case SDL_SCANCODE_RALT: return 0x3D;
+    case SDL_SCANCODE_RCTRL: return 0x3E;
+    case SDL_SCANCODE_RGUI: return 0x36;
+    case SDL_SCANCODE_F17: return 0x40;
+    case SDL_SCANCODE_KP_DECIMAL: return 0x41;
+    case SDL_SCANCODE_KP_MULTIPLY: return 0x43;
+    case SDL_SCANCODE_KP_PLUS: return 0x45;
+    case SDL_SCANCODE_NUMLOCKCLEAR: return 0x47;
+    case SDL_SCANCODE_KP_DIVIDE: return 0x4B;
+    case SDL_SCANCODE_KP_ENTER: return 0x4C;
+    case SDL_SCANCODE_KP_MINUS: return 0x4E;
+    case SDL_SCANCODE_KP_EQUALS: return 0x51;
+    case SDL_SCANCODE_KP_0: return 0x52;
+    case SDL_SCANCODE_KP_1: return 0x53;
+    case SDL_SCANCODE_KP_2: return 0x54;
+    case SDL_SCANCODE_KP_3: return 0x55;
+    case SDL_SCANCODE_KP_4: return 0x56;
+    case SDL_SCANCODE_KP_5: return 0x57;
+    case SDL_SCANCODE_KP_6: return 0x58;
+    case SDL_SCANCODE_KP_7: return 0x59;
+    case SDL_SCANCODE_F18: return 0x4F;
+    case SDL_SCANCODE_F19: return 0x50;
+    case SDL_SCANCODE_KP_8: return 0x5B;
+    case SDL_SCANCODE_KP_9: return 0x5C;
+    case SDL_SCANCODE_F5: return 0x60;
+    case SDL_SCANCODE_F6: return 0x61;
+    case SDL_SCANCODE_F7: return 0x62;
+    case SDL_SCANCODE_F3: return 0x63;
+    case SDL_SCANCODE_F8: return 0x64;
+    case SDL_SCANCODE_F9: return 0x65;
+    case SDL_SCANCODE_F11: return 0x67;
+    case SDL_SCANCODE_F13: return 0x69;
+    case SDL_SCANCODE_F16: return 0x6A;
+    case SDL_SCANCODE_F14: return 0x6B;
+    case SDL_SCANCODE_F10: return 0x6D;
+    case SDL_SCANCODE_F12: return 0x6F;
+    case SDL_SCANCODE_F15: return 0x71;
+    case SDL_SCANCODE_INSERT: return 0x72;
+    case SDL_SCANCODE_HOME: return 0x73;
+    case SDL_SCANCODE_PAGEUP: return 0x74;
+    case SDL_SCANCODE_DELETE: return 0x75;
+    case SDL_SCANCODE_F4: return 0x76;
+    case SDL_SCANCODE_END: return 0x77;
+    case SDL_SCANCODE_F2: return 0x78;
+    case SDL_SCANCODE_PAGEDOWN: return 0x79;
+    case SDL_SCANCODE_F1: return 0x7A;
+    case SDL_SCANCODE_LEFT: return 0x7B;
+    case SDL_SCANCODE_RIGHT: return 0x7C;
+    case SDL_SCANCODE_DOWN: return 0x7D;
+    case SDL_SCANCODE_UP: return 0x7E;
+    default: return 0xFFFF;
+    }
+}
+
+static void tb_disp_queue_input_event(struct tb_display *d, const struct tb_input_event *event) {
+    if (!d || !event) return;
+    int next = (d->input_head + 1) % 128;
+    if (next == d->input_tail) {
+        d->input_tail = (d->input_tail + 1) % 128;
+    }
+    d->input_events[d->input_head] = *event;
+    d->input_head = next;
+}
 
 static void tb_disp_destroy_status_texture(struct tb_display *d) {
     if (d->status_tex) {
@@ -145,6 +284,8 @@ static void tb_disp_rebuild_status_texture(struct tb_display *d,
                                            const char *sender,
                                            const char *panel,
                                            const char *mode,
+                                           const char *language,
+                                           const char *permissions,
                                            int drawable_w,
                                            int drawable_h) {
     if (!d || drawable_w <= 0 || drawable_h <= 0) return;
@@ -175,32 +316,60 @@ static void tb_disp_rebuild_status_texture(struct tb_display *d,
     CGContextScaleCTM(ctx, 1.0, -1.0);
 
     tb_disp_fill_rect(ctx, 0, 0, (CGFloat)drawable_w, (CGFloat)drawable_h, 0.06, 0.07, 0.09, 1.0);
-    tb_disp_fill_rect(ctx, 48, 52, (CGFloat)drawable_w - 96, (CGFloat)drawable_h - 104, 0.12, 0.13, 0.16, 1.0);
-    tb_disp_fill_rect(ctx, 48, (CGFloat)drawable_h - 152, (CGFloat)drawable_w - 96, 2, 0.23, 0.25, 0.30, 1.0);
+    tb_disp_fill_rect(ctx, 48, 52, (CGFloat)drawable_w - 96, (CGFloat)drawable_h - 104, 0.11, 0.12, 0.15, 1.0);
+    tb_disp_fill_rect(ctx, 48, (CGFloat)drawable_h - 152, (CGFloat)drawable_w - 96, 2, 0.22, 0.24, 0.29, 1.0);
 
-    tb_disp_draw_text(ctx, "TARGETBRIDGE RECEIVER", "Helvetica-Bold", 30, 72, (CGFloat)drawable_h - 76, 0.95, 0.97, 1.0);
-    tb_disp_draw_text(ctx, "5K / HiDPI receiver ready for sender", "Helvetica", 18, 72, (CGFloat)drawable_h - 118, 0.72, 0.76, 0.84);
-    tb_disp_draw_text(ctx, TB_RECEIVER_VERSION, "Menlo-Bold", 18, (CGFloat)drawable_w - 220, (CGFloat)drawable_h - 78, 0.64, 0.69, 0.78);
-    tb_disp_draw_text(ctx, TB_RECEIVER_BUILD, "Menlo", 14, (CGFloat)drawable_w - 220, (CGFloat)drawable_h - 120, 0.53, 0.57, 0.66);
+    const char *current_language = tb_i18n_current_language();
+    const int zh = current_language && strncmp(current_language, "zh", 2) == 0;
+    const char *title_font = zh ? "PingFangSC-Semibold" : "Helvetica-Bold";
+    const char *body_font = zh ? "PingFangSC-Regular" : "Helvetica";
+    const char *section_font = zh ? "PingFangSC-Semibold" : "Helvetica-Bold";
+    const char *mono_font = "Menlo";
+    const char *mono_bold_font = "Menlo-Bold";
 
-    tb_disp_draw_text(ctx, "IP THUNDERBOLT BRIDGE", "Helvetica-Bold", 16, 72, (CGFloat)drawable_h - 190, 0.54, 0.62, 0.76);
-    tb_disp_draw_text(ctx, ip, "Menlo-Bold", 36, 72, (CGFloat)drawable_h - 235, 0.43, 0.93, 0.60);
+    const CGFloat outer_x = 72.0;
+    const CGFloat outer_w = (CGFloat)drawable_w - 144.0;
+    const CGFloat top_y = (CGFloat)drawable_h - 176.0;
+    const CGFloat card_gap = 28.0;
+    const CGFloat card_w = (outer_w - card_gap) / 2.0;
 
-    tb_disp_draw_text(ctx, "STATUS", "Helvetica-Bold", 16, 72, (CGFloat)drawable_h - 300, 0.54, 0.62, 0.76);
-    tb_disp_draw_text(ctx, status, "Helvetica", 24, 72, (CGFloat)drawable_h - 338, 0.94, 0.96, 0.99);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.title"), title_font, 28, 72, (CGFloat)drawable_h - 84, 0.95, 0.97, 1.0);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.subtitle"), body_font, 17, 72, (CGFloat)drawable_h - 118, 0.72, 0.76, 0.84);
+    tb_disp_draw_text(ctx, TB_RECEIVER_VERSION, mono_bold_font, 17, (CGFloat)drawable_w - 220, (CGFloat)drawable_h - 82, 0.64, 0.69, 0.78);
+    tb_disp_draw_text(ctx, TB_RECEIVER_BUILD, mono_font, 13, (CGFloat)drawable_w - 220, (CGFloat)drawable_h - 114, 0.53, 0.57, 0.66);
 
-    tb_disp_draw_text(ctx, "SENDER", "Helvetica-Bold", 16, 72, (CGFloat)drawable_h - 400, 0.54, 0.62, 0.76);
-    tb_disp_draw_text(ctx, sender, "Helvetica", 22, 72, (CGFloat)drawable_h - 436, 0.94, 0.96, 0.99);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.ip_thunderbolt_bridge"), section_font, 15, outer_x, top_y, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, ip, mono_bold_font, 34, outer_x, top_y - 42.0, 0.43, 0.93, 0.60);
 
-    tb_disp_draw_text(ctx, "DISPLAY", "Helvetica-Bold", 16, 72, (CGFloat)drawable_h - 498, 0.54, 0.62, 0.76);
-    tb_disp_draw_text(ctx, panel, "Menlo", 22, 72, (CGFloat)drawable_h - 534, 0.94, 0.96, 0.99);
+    const CGFloat info_top = top_y - 126.0;
+    const CGFloat info_h = 194.0;
+    tb_disp_fill_rect(ctx, outer_x, info_top - info_h, card_w, info_h, 0.14, 0.15, 0.19, 1.0);
+    tb_disp_fill_rect(ctx, outer_x + card_w + card_gap, info_top - info_h, card_w, info_h, 0.14, 0.15, 0.19, 1.0);
 
-    tb_disp_draw_text(ctx, "STREAM PROFILE", "Helvetica-Bold", 16, 72, (CGFloat)drawable_h - 596, 0.54, 0.62, 0.76);
-    tb_disp_draw_text(ctx, mode, "Menlo", 22, 72, (CGFloat)drawable_h - 632, 0.94, 0.96, 0.99);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.status"), section_font, 15, outer_x + 20.0, info_top - 34.0, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, status, body_font, 22, outer_x + 20.0, info_top - 68.0, 0.94, 0.96, 0.99);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.sender"), section_font, 14, outer_x + 20.0, info_top - 118.0, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, sender, body_font, 20, outer_x + 20.0, info_top - 148.0, 0.94, 0.96, 0.99);
 
-    tb_disp_draw_text(ctx, "Start the sender on your MacBook and enter this IP address.", "Helvetica", 18, 72, 146, 0.76, 0.80, 0.88);
-    tb_disp_draw_text(ctx, "When the first frame arrives, the receiver switches to fullscreen automatically.", "Helvetica", 18, 72, 116, 0.76, 0.80, 0.88);
-    tb_disp_draw_text(ctx, "If the sender stops, the receiver returns here ready for a new session.", "Helvetica", 18, 72, 86, 0.76, 0.80, 0.88);
+    const CGFloat display_x = outer_x + card_w + card_gap + 20.0;
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.display"), section_font, 15, display_x, info_top - 34.0, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, panel, zh ? body_font : mono_font, 20, display_x, info_top - 68.0, 0.94, 0.96, 0.99);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.stream_profile"), section_font, 14, display_x, info_top - 118.0, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, mode, zh ? body_font : mono_font, 20, display_x, info_top - 148.0, 0.94, 0.96, 0.99);
+
+    const CGFloat footer_top = info_top - info_h - 28.0;
+    const CGFloat footer_h = 150.0;
+    tb_disp_fill_rect(ctx, outer_x, footer_top - footer_h, outer_w, footer_h, 0.14, 0.15, 0.19, 1.0);
+
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.language"), section_font, 15, outer_x + 20.0, footer_top - 32.0, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, language, body_font, 20, outer_x + 20.0, footer_top - 64.0, 0.94, 0.96, 0.99);
+
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.permissions"), section_font, 15, outer_x + 20.0, footer_top - 102.0, 0.54, 0.62, 0.76);
+    tb_disp_draw_text(ctx, permissions, body_font, 20, outer_x + 20.0, footer_top - 134.0, 0.94, 0.96, 0.99);
+
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.help_1"), body_font, 17, 72, 138, 0.76, 0.80, 0.88);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.help_2"), body_font, 17, 72, 108, 0.76, 0.80, 0.88);
+    tb_disp_draw_text(ctx, tb_i18n_get("receiver.ui.help_4"), body_font, 17, 72, 78, 0.76, 0.80, 0.88);
 
     CGContextRelease(ctx);
 
@@ -223,25 +392,68 @@ static void tb_disp_refresh_window_mode(struct tb_display *d) {
 
     if (d->is_connected && d->preferred_fullscreen) {
         SDL_SetWindowFullscreen(d->win, SDL_WINDOW_FULLSCREEN_DESKTOP);
-        SDL_ShowCursor(SDL_DISABLE);
     } else {
         SDL_SetWindowFullscreen(d->win, 0);
         SDL_SetWindowSize(d->win, 980, 620);
         SDL_SetWindowPosition(d->win, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
-        SDL_ShowCursor(SDL_ENABLE);
+    }
+
+    const int should_hide_cursor =
+        (d->is_connected && d->preferred_fullscreen) ||
+        d->input_capture_active ||
+        d->input_intercept_active;
+
+    SDL_ShowCursor(should_hide_cursor ? SDL_DISABLE : SDL_ENABLE);
+    if (should_hide_cursor && !d->system_cursor_hidden) {
+        CGDisplayHideCursor(CGMainDisplayID());
+        d->system_cursor_hidden = 1;
+    } else if (!should_hide_cursor && d->system_cursor_hidden) {
+        CGDisplayShowCursor(CGMainDisplayID());
+        d->system_cursor_hidden = 0;
     }
 }
 
-struct tb_display *tb_disp_create(int fullscreen) {
-    /* Force OpenGL renderer driver to avoid Metal's HDR/swapchain flickering on macOS Tahoe. */
-    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
+static SDL_Renderer *tb_disp_try_renderer(SDL_Window *win, const char *driver) {
+    if (driver && driver[0] != '\0') {
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, driver);
+    } else {
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "");
+    }
 
+    SDL_Renderer *ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
+    if (!ren) {
+        fprintf(stderr, "[disp] CreateRenderer(%s): %s\n",
+                driver && driver[0] != '\0' ? driver : "default",
+                SDL_GetError());
+    }
+    return ren;
+}
+
+static SDL_Renderer *tb_disp_create_accelerated_renderer(SDL_Window *win) {
+    const char *forced_driver = getenv("TB_RECEIVER_RENDER_DRIVER");
+    if (forced_driver && forced_driver[0] != '\0') {
+        fprintf(stderr, "[disp] renderer override = %s\n", forced_driver);
+        return tb_disp_try_renderer(win, forced_driver);
+    }
+
+#if defined(__APPLE__)
+    const char *macos_drivers[] = { "opengl", "metal", NULL };
+    for (int i = 0; macos_drivers[i] != NULL; i++) {
+        SDL_Renderer *ren = tb_disp_try_renderer(win, macos_drivers[i]);
+        if (ren) return ren;
+    }
+#endif
+
+    return tb_disp_try_renderer(win, NULL);
+}
+
+struct tb_display *tb_disp_create(int fullscreen) {
     /* Best-quality scaling (linear filter; Metal backend uses bilinear
      * regardless but this sets the hint correctly). "best" enables
      * anisotropic where supported. Must be set BEFORE renderer creation. */
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best");
 
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "[disp] SDL_Init: %s\n", SDL_GetError());
         return NULL;
     }
@@ -263,7 +475,7 @@ struct tb_display *tb_disp_create(int fullscreen) {
     /* No VSYNC: lets us present as fast as decode produces frames.
      * On Intel iMac with Radeon Pro 570 + 5K display, VSYNC at 60Hz combined
      * with GPU→CPU NV12 transfer was stalling the pipeline to ~4 fps. */
-    d->ren = SDL_CreateRenderer(d->win, -1, SDL_RENDERER_ACCELERATED);
+    d->ren = tb_disp_create_accelerated_renderer(d->win);
     if (!d->ren) {
         fprintf(stderr, "[disp] CreateRenderer: %s\n", SDL_GetError());
         SDL_DestroyWindow(d->win); free(d); return NULL;
@@ -291,6 +503,7 @@ struct tb_display *tb_disp_create(int fullscreen) {
     d->last_sender[0] = '\0';
     d->last_panel[0] = '\0';
     d->last_mode[0] = '\0';
+    d->last_language[0] = '\0';
     d->last_drawable_w = 0;
     d->last_drawable_h = 0;
     d->cursor_x = 0;
@@ -299,6 +512,7 @@ struct tb_display *tb_disp_create(int fullscreen) {
     d->cursor_source_h = 1;
     d->cursor_visible = 0;
     d->cursor_type = 0;
+    d->system_cursor_hidden = 0;
     d->last_video_frame_time = 0;
 
     tb_disp_refresh_window_mode(d);
@@ -308,6 +522,10 @@ struct tb_display *tb_disp_create(int fullscreen) {
 
 void tb_disp_destroy(struct tb_display *d) {
     if (!d) return;
+    if (d->system_cursor_hidden) {
+        CGDisplayShowCursor(CGMainDisplayID());
+        d->system_cursor_hidden = 0;
+    }
     tb_disp_destroy_status_texture(d);
     if (d->tex) SDL_DestroyTexture(d->tex);
     if (d->ren) SDL_DestroyRenderer(d->ren);
@@ -837,14 +1055,157 @@ void tb_disp_set_cursor(struct tb_display *d,
     }
 }
 
-int tb_disp_poll_quit(struct tb_display *d) {
+unsigned int tb_disp_poll_actions(struct tb_display *d) {
+    unsigned int actions = TB_DISP_ACTION_NONE;
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         if (ev.type == SDL_QUIT) d->quit = 1;
-        else if (ev.type == SDL_KEYDOWN &&
+        else if (!d->input_capture_active &&
+                 !d->input_intercept_active &&
+                 ev.type == SDL_KEYDOWN &&
                  ev.key.keysym.sym == SDLK_ESCAPE) d->quit = 1;
+        else if (!d->input_capture_active &&
+                 !d->input_intercept_active &&
+                 ev.type == SDL_KEYDOWN &&
+                 ev.key.keysym.sym == SDLK_l) actions |= TB_DISP_ACTION_CYCLE_LANGUAGE;
+        else if (d->input_capture_active) {
+            struct tb_input_event input_event;
+            memset(&input_event, 0, sizeof(input_event));
+            switch (ev.type) {
+            case SDL_MOUSEMOTION:
+                if (ev.motion.x <= 2 && ev.motion.xrel < 0 && SDL_GetTicks() - d->last_target_switch_tick > 450) {
+                    input_event.kind = TB_INPUT_EVENT_SWITCH_PREV_TARGET;
+                    tb_disp_queue_input_event(d, &input_event);
+                    d->last_target_switch_tick = SDL_GetTicks();
+                    break;
+                }
+                if (ev.motion.x >= d->last_drawable_w - 2 && ev.motion.xrel > 0 && SDL_GetTicks() - d->last_target_switch_tick > 450) {
+                    input_event.kind = TB_INPUT_EVENT_SWITCH_NEXT_TARGET;
+                    tb_disp_queue_input_event(d, &input_event);
+                    d->last_target_switch_tick = SDL_GetTicks();
+                    break;
+                }
+                if (ev.motion.state & SDL_BUTTON_LMASK) input_event.kind = TB_INPUT_EVENT_LEFT_DRAG;
+                else if (ev.motion.state & SDL_BUTTON_RMASK) input_event.kind = TB_INPUT_EVENT_RIGHT_DRAG;
+                else if (ev.motion.state & SDL_BUTTON_MMASK) input_event.kind = TB_INPUT_EVENT_OTHER_DRAG;
+                else input_event.kind = TB_INPUT_EVENT_MOVE;
+                input_event.dx = ev.motion.xrel;
+                input_event.dy = ev.motion.yrel;
+                tb_disp_queue_input_event(d, &input_event);
+                break;
+            case SDL_MOUSEWHEEL:
+            {
+                uint32_t now = SDL_GetTicks();
+                SDL_Keymod mods = SDL_GetModState();
+                if ((mods & KMOD_ALT) &&
+                    abs(ev.wheel.x) > abs(ev.wheel.y) &&
+                    ev.wheel.x != 0 &&
+                    now - d->last_space_switch_tick > 300) {
+                    input_event.kind = ev.wheel.x > 0 ? TB_INPUT_EVENT_SWITCH_NEXT_SPACE : TB_INPUT_EVENT_SWITCH_PREV_SPACE;
+                    tb_disp_queue_input_event(d, &input_event);
+                    d->last_space_switch_tick = now;
+                    d->space_gesture_accum_x = 0;
+                    break;
+                }
+                if (abs(ev.wheel.x) > abs(ev.wheel.y) * 2 && ev.wheel.x != 0) {
+                    if (now - d->last_space_gesture_tick > 250) {
+                        d->space_gesture_accum_x = 0;
+                    }
+                    d->last_space_gesture_tick = now;
+                    d->space_gesture_accum_x += ev.wheel.x;
+                    if (abs(d->space_gesture_accum_x) >= 6 &&
+                        now - d->last_space_switch_tick > 450) {
+                        input_event.kind = d->space_gesture_accum_x > 0 ? TB_INPUT_EVENT_SWITCH_NEXT_SPACE : TB_INPUT_EVENT_SWITCH_PREV_SPACE;
+                        tb_disp_queue_input_event(d, &input_event);
+                        d->last_space_switch_tick = now;
+                        d->space_gesture_accum_x = 0;
+                    }
+                    break;
+                }
+                if (now - d->last_space_gesture_tick > 250) {
+                    d->space_gesture_accum_x = 0;
+                }
+                input_event.kind = TB_INPUT_EVENT_SCROLL;
+                input_event.scroll_x = ev.wheel.x;
+                input_event.scroll_y = ev.wheel.y;
+                tb_disp_queue_input_event(d, &input_event);
+                break;
+            }
+            case SDL_MOUSEBUTTONDOWN:
+                if (ev.button.button == SDL_BUTTON_LEFT) input_event.kind = TB_INPUT_EVENT_LEFT_DOWN;
+                else if (ev.button.button == SDL_BUTTON_RIGHT) input_event.kind = TB_INPUT_EVENT_RIGHT_DOWN;
+                else input_event.kind = TB_INPUT_EVENT_OTHER_DOWN;
+                tb_disp_queue_input_event(d, &input_event);
+                break;
+            case SDL_MOUSEBUTTONUP:
+                if (ev.button.button == SDL_BUTTON_LEFT) input_event.kind = TB_INPUT_EVENT_LEFT_UP;
+                else if (ev.button.button == SDL_BUTTON_RIGHT) input_event.kind = TB_INPUT_EVENT_RIGHT_UP;
+                else input_event.kind = TB_INPUT_EVENT_OTHER_UP;
+                tb_disp_queue_input_event(d, &input_event);
+                break;
+            case SDL_KEYDOWN:
+                if (!ev.key.repeat) {
+                    if ((ev.key.keysym.mod & KMOD_CTRL) &&
+                        (ev.key.keysym.mod & KMOD_ALT) &&
+                        (ev.key.keysym.mod & KMOD_GUI) &&
+                        ev.key.keysym.sym == SDLK_k) {
+                        input_event.kind = TB_INPUT_EVENT_DEACTIVATE_CONTROL;
+                        tb_disp_queue_input_event(d, &input_event);
+                        break;
+                    }
+                    if ((ev.key.keysym.mod & KMOD_CTRL) && (ev.key.keysym.mod & KMOD_GUI)) {
+                        if (ev.key.keysym.sym == SDLK_LEFT) {
+                            input_event.kind = TB_INPUT_EVENT_SWITCH_PREV_TARGET;
+                            tb_disp_queue_input_event(d, &input_event);
+                            break;
+                        }
+                        if (ev.key.keysym.sym == SDLK_RIGHT) {
+                            input_event.kind = TB_INPUT_EVENT_SWITCH_NEXT_TARGET;
+                            tb_disp_queue_input_event(d, &input_event);
+                            break;
+                        }
+                    }
+                    uint16_t mac_key_code = tb_disp_mac_keycode_for_sdl_scancode(ev.key.keysym.scancode);
+                    if (mac_key_code == 0xFFFF) break;
+                    input_event.kind = TB_INPUT_EVENT_KEY_DOWN;
+                    input_event.key_code = mac_key_code;
+                    tb_disp_queue_input_event(d, &input_event);
+                }
+                break;
+            case SDL_KEYUP:
+                {
+                if ((ev.key.keysym.mod & KMOD_CTRL) &&
+                    (ev.key.keysym.mod & KMOD_ALT) &&
+                    (ev.key.keysym.mod & KMOD_GUI) &&
+                    ev.key.keysym.sym == SDLK_k) {
+                    break;
+                }
+                if ((ev.key.keysym.mod & KMOD_CTRL) && (ev.key.keysym.mod & KMOD_GUI) &&
+                    (ev.key.keysym.sym == SDLK_LEFT || ev.key.keysym.sym == SDLK_RIGHT)) {
+                    break;
+                }
+                uint16_t mac_key_code = tb_disp_mac_keycode_for_sdl_scancode(ev.key.keysym.scancode);
+                if (mac_key_code == 0xFFFF) break;
+                input_event.kind = TB_INPUT_EVENT_KEY_UP;
+                input_event.key_code = mac_key_code;
+                tb_disp_queue_input_event(d, &input_event);
+                }
+                break;
+            default:
+                break;
+            }
+        }
     }
-    return d->quit;
+    if (d->quit) actions |= TB_DISP_ACTION_QUIT;
+    return actions;
+}
+
+int tb_disp_pop_input_event(struct tb_display *d, struct tb_input_event *out) {
+    if (!d || !out) return 0;
+    if (d->input_tail == d->input_head) return 0;
+    *out = d->input_events[d->input_tail];
+    d->input_tail = (d->input_tail + 1) % 128;
+    return 1;
 }
 
 int tb_disp_get_info(struct tb_display *d, struct tb_display_info *info) {
@@ -892,21 +1253,37 @@ void tb_disp_set_connection_state(struct tb_display *d, int connected) {
     tb_disp_refresh_window_mode(d);
 }
 
+void tb_disp_set_input_capture_active(struct tb_display *d, int active) {
+    if (!d) return;
+    d->input_capture_active = active ? 1 : 0;
+    tb_disp_refresh_window_mode(d);
+}
+
+void tb_disp_set_input_intercept_active(struct tb_display *d, int active) {
+    if (!d) return;
+    d->input_intercept_active = active ? 1 : 0;
+    tb_disp_refresh_window_mode(d);
+}
+
 void tb_disp_render_status(struct tb_display *d,
                            const char *ip,
                            const char *status,
                            const char *sender,
                            const char *panel,
-                           const char *mode) {
+                           const char *mode,
+                           const char *language,
+                           const char *permissions) {
     if (!d || !d->ren || !d->win) return;
 
     tb_disp_set_connection_state(d, 0);
 
-    if (!ip) ip = "not detected";
-    if (!status) status = "waiting for sender";
-    if (!sender) sender = "waiting";
-    if (!panel) panel = "unknown display";
-    if (!mode) mode = "2560 x 1440 HiDPI on 5K display";
+    if (!ip) ip = tb_i18n_get("receiver.network.not_detected");
+    if (!status) status = tb_i18n_get("receiver.status.waiting_for_sender");
+    if (!sender) sender = tb_i18n_get("receiver.status.waiting");
+    if (!panel) panel = tb_i18n_get("receiver.panel.unknown");
+    if (!mode) mode = tb_i18n_get("receiver.mode.default");
+    if (!language) language = tb_i18n_get("receiver.language.auto");
+    if (!permissions) permissions = "";
 
     int drawable_w = 0, drawable_h = 0;
     if (SDL_GetRendererOutputSize(d->ren, &drawable_w, &drawable_h) < 0 ||
@@ -920,6 +1297,8 @@ void tb_disp_render_status(struct tb_display *d,
         strcmp(d->last_sender, sender) != 0 ||
         strcmp(d->last_panel, panel) != 0 ||
         strcmp(d->last_mode, mode) != 0 ||
+        strcmp(d->last_language, language) != 0 ||
+        strcmp(d->last_permissions, permissions) != 0 ||
         d->last_drawable_w != drawable_w ||
         d->last_drawable_h != drawable_h ||
         d->status_tex == NULL) {
@@ -928,16 +1307,50 @@ void tb_disp_render_status(struct tb_display *d,
         snprintf(d->last_sender, sizeof(d->last_sender), "%s", sender);
         snprintf(d->last_panel, sizeof(d->last_panel), "%s", panel);
         snprintf(d->last_mode, sizeof(d->last_mode), "%s", mode);
+        snprintf(d->last_language, sizeof(d->last_language), "%s", language);
+        snprintf(d->last_permissions, sizeof(d->last_permissions), "%s", permissions);
         d->last_drawable_w = drawable_w;
         d->last_drawable_h = drawable_h;
-        tb_disp_rebuild_status_texture(d, ip, status, sender, panel, mode, drawable_w, drawable_h);
+        tb_disp_rebuild_status_texture(d, ip, status, sender, panel, mode, language, permissions, drawable_w, drawable_h);
     }
 
     char title[256];
-    snprintf(title, sizeof(title), "TBDisplayReceiverC %s — IP %s — %s", TB_RECEIVER_VERSION, ip, status);
+    snprintf(title, sizeof(title), "TBDisplayReceiverC %s — %s — %s", TB_RECEIVER_VERSION, ip, status);
     SDL_SetWindowTitle(d->win, title);
 
     SDL_RenderClear(d->ren);
     if (d->status_tex) SDL_RenderCopy(d->ren, d->status_tex, NULL, NULL);
     SDL_RenderPresent(d->ren);
+}
+
+void tb_disp_set_brightness(struct tb_display *d, double level) {
+    (void)d;
+    if (level < 0.0) level = 0.0;
+    if (level > 1.0) level = 1.0;
+
+    void *lib = dlopen("/System/Library/PrivateFrameworks/DisplayServices.framework/Versions/A/DisplayServices", RTLD_LAZY);
+    if (!lib) {
+        fprintf(stderr, "[disp] failed to dlopen DisplayServices\n");
+        return;
+    }
+
+    typedef int (*SetBrightnessFunc)(CGDirectDisplayID display, float brightness);
+    SetBrightnessFunc set_brightness = (SetBrightnessFunc)dlsym(lib, "DisplayServicesSetBrightness");
+    if (!set_brightness) {
+        fprintf(stderr, "[disp] failed to find DisplayServicesSetBrightness symbol\n");
+        dlclose(lib);
+        return;
+    }
+
+    CGDirectDisplayID displays[16];
+    uint32_t count = 0;
+    if (CGGetActiveDisplayList(16, displays, &count) == kCGErrorSuccess) {
+        for (uint32_t i = 0; i < count; i++) {
+            set_brightness(displays[i], (float)level);
+        }
+    } else {
+        set_brightness(CGMainDisplayID(), (float)level);
+    }
+
+    dlclose(lib);
 }

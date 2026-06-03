@@ -4,16 +4,23 @@ enum TBMonitorPacketType: UInt8 {
     case helloReceiver = 0x10
     case displayProfile = 0x11
     case createSessionAck = 0x12
+    case uiLanguage = 0x13
     case paramSets = 0x20
     case frame = 0x21
+    case audioFrame = 0x23
     case heartbeat = 0x30
     case teardown = 0x31
     case cursor = 0x32
+    case inputEvent = 0x33
+    case inputControlMode = 0x34
+    case brightness = 0x35
+    case clipboard = 0x36
     case testData = 0x40
 }
 
 struct TBMonitorHelloReceiver: Codable {
     var senderName: String
+    var uiLanguage: String?
     var capturePreset: String?
     var captureSource: String?
     var captureWidth: Int?
@@ -31,12 +38,19 @@ struct TBMonitorDisplayProfile: Codable {
     var hiDPI: Bool
     var captureWidth: Int
     var captureHeight: Int
+    var supportsHEVCDecode: Bool?
+    var inputMonitoringTrusted: Bool?
+    var accessibilityTrusted: Bool?
 }
 
 struct TBMonitorCreateSessionAck: Codable {
     var accepted: Bool
     var displayName: String
     var displayID: UInt32
+}
+
+struct TBMonitorUILanguageUpdate: Codable {
+    var uiLanguage: String
 }
 
 struct TBMonitorHeartbeat: Codable {
@@ -54,6 +68,27 @@ struct TBMonitorCursor: Codable {
     var height: Int
     var visible: Bool
     var type: Int
+}
+
+struct TBMonitorInputEvent: Codable {
+    var kind: String
+    var dx: Int?
+    var dy: Int?
+    var scrollX: Int?
+    var scrollY: Int?
+    var keyCode: UInt16?
+}
+
+struct TBMonitorInputControlMode: Codable {
+    var mode: String
+}
+
+struct TBMonitorBrightness: Codable {
+    var level: Double
+}
+
+struct TBMonitorClipboard: Codable {
+    var text: String
 }
 
 enum TBMonitorProtocol {

@@ -14,22 +14,55 @@ Sponsoring the TargetBridge project is also very welcome:
 
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-pink?logo=github)](https://github.com/sponsors/swellweb)
 
-## Features
+## TargetBridge 3.0
 
-- a sender can stream either an extended virtual display or a mirror of the sender display
-- one sender can stream to multiple receiver machines (using multiple TB cables)
-- multiple available stream profiles from 2560x1440 to 5120x2880 at various refresh rates
-- uses low latency, high throughput thunderbolt connections
-- uses Apple Silicon Media Engines for fast H.264/HEVC encoding
-- automatic receiver discovery via Bonjour
-- remembers extended-display arrangement per receiver
+TargetBridge 3.0 turns the project into a more complete multi-Mac workspace:
+
+- mirror mode and extended desktop mode
+- multiple receivers from one sender
+- experimental `Network Link` transport in addition to Thunderbolt Bridge
+- streamed system audio
+- shared JSON localization for Sender and Receiver
+- official manifest-based addons
+- `Input Dockstation` with master/slave keyboard and mouse control
+- text clipboard sync tied to the active input master
+- remote brightness control from the sender
+- automatic receiver discovery and extended-layout restore
+
+## Feature Guides
+
+- Overview hub: [docs/Features.md](docs/Features.md)
+- Mirror mode and Extended Desktop: [docs/Features.md#display-modes](docs/Features.md#display-modes)
+- Multi-receiver layouts: [docs/Features.md#multi-receiver-workflows](docs/Features.md#multi-receiver-workflows)
+- Network Link (experimental): [docs/Features.md#network-link-experimental](docs/Features.md#network-link-experimental)
+- Audio Relay: [docs/Features.md#audio-relay](docs/Features.md#audio-relay)
+- Input Dockstation, clipboard sync, and master/slave roles: [docs/Features.md#input-dockstation](docs/Features.md#input-dockstation)
+- Remote brightness control: [docs/Features.md#remote-brightness-control](docs/Features.md#remote-brightness-control)
+- Shared translations and language files: [docs/Features.md#shared-translations](docs/Features.md#shared-translations)
+- Thunderbolt networking extras (SSH/SFTP, file sharing, Internet Sharing): [docs/Features.md#thunderbolt-networking-extras](docs/Features.md#thunderbolt-networking-extras)
+
+## Core Features
+
+- Sender can stream either a mirrored desktop or an extended virtual display. See [Display Modes](docs/Features.md#display-modes).
+- One sender can drive multiple receiver Macs over separate cables. See [Multi-Receiver Workflows](docs/Features.md#multi-receiver-workflows).
+- Stream profiles range from `2560 x 1440` to `5120 x 2880` with H.264/HEVC selection based on capability. See [Display Modes](docs/Features.md#display-modes).
+- Receiver discovery is automatic over Bonjour. Extended-display arrangement is remembered per receiver when possible. See [Display Modes](docs/Features.md#display-modes).
+- Thunderbolt Bridge remains the primary low-latency path, with `Network Link` available as an experimental addon-gated transport. See [Network Link](docs/Features.md#network-link-experimental).
+
+## Official Addons
+
+TargetBridge now has a conservative manifest-based addon system. Official manifests ship with the app, and user manifests can be imported from the settings UI.
+
+- `Network Link`: local Ethernet/Wi-Fi transport path for the same display pipeline. See [docs/Addons.md#official-addons](docs/Addons.md#official-addons) and [Network Link](docs/Features.md#network-link-experimental).
+- `Audio Relay`: streamed system audio from sender to receiver. See [docs/audio.md](docs/audio.md) and [docs/Addons.md#official-addons](docs/Addons.md#official-addons).
+- `Input Dockstation`: keyboard/mouse relay, master/slave roles, slave switching, and text clipboard sync. See [docs/Addons.md#input-dockstation](docs/Addons.md#input-dockstation) and [Input Dockstation](docs/Features.md#input-dockstation).
 
 ## Requirements
 
 - Sender: Apple Silicon Mac (M1 or later), macOS 14 Sonoma or later
 - Receiver: Intel or Apple Silicon Mac, macOS 11 Big Sur or later
 - Thunderbolt cable
-- see also [Hardware.md](docs/Hardware.md) for more hardware information
+- See also [docs/Hardware.md](docs/Hardware.md) for hardware details, tested cables, adapters, and Thunderbolt networking ideas.
 
 ## Download
 
@@ -50,17 +83,44 @@ If you build from source, app outputs go into `build/` folder.
 > xattr -cr ~/Downloads/TargetBridge-Receiver-x86_64.app
 > ```
 
-## Extended Desktop
+## Permissions
 
-For an extended desktop, choose `Extended display` on the sender before connecting. After the virtual display appears, open macOS **System Settings → Displays → Arrange** on the sender Mac and position the external display where you want it. TargetBridge now reuses the last saved extended-display position for the same receiver when possible.
-
-If the receiver does not fill the iMac panel or the cursor/desktop feels scaled incorrectly, select the external TargetBridge display in macOS Display Settings and choose the matching resolution. For the 27-inch 5K iMac path, use a high-clarity stream profile such as `Crisp` or `5K` with the external display set to the matching 2560 × 1440 HiDPI mode.
+- Sender usually needs `Screen Recording`.
+- `Input Dockstation` may also require `Accessibility` and `Input Monitoring`, depending on the active role.
+- Receiver may require `Accessibility` or `Input Monitoring` when it participates in input relay.
+- In practice, `Input Dockstation` is a two-sided feature: one Mac captures input, the other injects it, so permissions may be needed on both Sender and Receiver.
+- See [docs/Addons.md#input-dockstation](docs/Addons.md#input-dockstation) for the permission matrix.
 
 ## Quick start
 
 - Italian: [docs/QuickStart-IT.md](docs/QuickStart-IT.md)
 - English: [docs/QuickStart-EN.md](docs/QuickStart-EN.md)
 - 中文: [docs/QuickStart-ZH.md](docs/QuickStart-ZH.md)
+- Translation guide: [docs/Translations.md](docs/Translations.md)
+
+## Detailed Documentation
+
+- Feature overview: [docs/Features.md](docs/Features.md)
+- Addon manifests and capability model: [docs/Addons.md](docs/Addons.md)
+- Audio transport internals: [docs/audio.md](docs/audio.md)
+- Hardware, cables, adapters, and Thunderbolt Bridge networking: [docs/Hardware.md](docs/Hardware.md)
+- Translation workflow: [docs/Translations.md](docs/Translations.md)
+- Binary verification: [docs/verify-binaries.md](docs/verify-binaries.md)
+
+## Licensing and brand
+
+TargetBridge source code is available under the MIT License. Please preserve the
+required copyright and license notices when redistributing copies or substantial
+portions of the software.
+
+Project branding is handled separately from the source code license:
+
+- [LICENSE](LICENSE)
+- [NOTICE](NOTICE)
+- [TRADEMARKS.md](TRADEMARKS.md)
+- [COMMERCIAL.md](COMMERCIAL.md)
+- [docs/Licensing-Strategy.md](docs/Licensing-Strategy.md)
+- [docs/Copyright-Headers.md](docs/Copyright-Headers.md)
 
 ## Screenshots
 

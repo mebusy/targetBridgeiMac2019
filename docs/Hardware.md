@@ -52,3 +52,42 @@ these, you will need an adapter:
   This adapter fits into a TB3 port and accepts a TB2 cable. With Macs, you can also use this with a TB4 or TB5 port.
 
 Note: Generic USB C to Mini DisplayPort adapters will not work. They lack the required circuitry to pass through Thunderbolt data. You must use an adapter that explicitly supports Thunderbolt, not just DisplayPort.
+
+
+Thunderbolt Networking
+----------------------
+
+TargetBridge uses Thunderbolt Bridge for low-latency display streaming, but the
+same link can also be used as a regular macOS network connection.
+
+This means a TargetBridge setup can optionally also be used for common
+peer-to-peer services between the sender Mac and the receiver Mac, without any
+additional TargetBridge code.
+
+Examples:
+- Internet Sharing from one Mac to the other
+- File Sharing over Thunderbolt Bridge
+- SSH / SFTP access between the Macs
+- Time Machine backups to storage attached to the other Mac
+- Printer sharing for USB printers attached to the other Mac
+
+Practical ideas:
+- A receiver iMac can expose its Ethernet, Wi-Fi, or attached storage to the
+  sender Mac over the same Thunderbolt cable.
+- A sender MacBook can provide internet access to an offline receiver Mac via
+  macOS Internet Sharing.
+- An iMac with attached SSDs or HDDs can act as a fast Thunderbolt-connected
+  file server for the sender.
+
+Setup notes:
+- On macOS, this is configured with built-in system features such as
+  Thunderbolt Bridge, Internet Sharing, File Sharing, Remote Login, and Printer
+  Sharing.
+- No extra TargetBridge feature needs to be enabled for this. It is a standard
+  network/service setup that happens alongside the display link.
+- Performance and availability depend on the specific Macs, ports, cable, and
+  service configuration.
+
+Out of scope for this document:
+- Shared keyboard/mouse control is a separate feature idea and is not part of
+  the standard Thunderbolt Bridge networking setup described here.

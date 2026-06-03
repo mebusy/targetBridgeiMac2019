@@ -84,6 +84,35 @@ struct tb_decoder *tb_dec_create(tb_frame_cb cb, void *ud) {
     return d;
 }
 
+int tb_dec_supports_hevc_hwdecode(void) {
+    const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_HEVC);
+    if (!codec) return 0;
+
+    enum AVHWDeviceType type = pick_hwdev();
+    if (type == AV_HWDEVICE_TYPE_NONE) return 0;
+
+    enum AVPixelFormat supported_hw_pix_fmt = AV_PIX_FMT_NONE;
+    for (int i = 0;; i++) {
+        const AVCodecHWConfig *cfg = avcodec_get_hw_config(codec, i);
+        if (!cfg) break;
+        if ((cfg->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) &&
+            cfg->device_type == type) {
+            supported_hw_pix_fmt = cfg->pix_fmt;
+            break;
+        }
+    }
+    if (supported_hw_pix_fmt == AV_PIX_FMT_NONE) {
+        return 0;
+    }
+
+    AVBufferRef *hw_dev = NULL;
+    int status = av_hwdevice_ctx_create(&hw_dev, type, NULL, NULL, 0);
+    if (hw_dev) {
+        av_buffer_unref(&hw_dev);
+    }
+    return status >= 0 ? 1 : 0;
+}
+
 void tb_dec_reset(struct tb_decoder *d) {
     if (!d) return;
     if (d->ctx) avcodec_free_context(&d->ctx);
