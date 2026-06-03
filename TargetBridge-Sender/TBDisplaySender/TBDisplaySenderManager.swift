@@ -84,6 +84,13 @@ final class TBDisplaySenderService: ObservableObject {
             objectWillChange.send()
         }
     }
+    @Published var verboseDisplayLogging: Bool = UserDefaults.standard.bool(forKey: "fd.tbdisplaysender.verboseDisplayLogging") {
+        didSet {
+            UserDefaults.standard.set(verboseDisplayLogging, forKey: "fd.tbdisplaysender.verboseDisplayLogging")
+            sessions.forEach { $0.verboseDisplayLogging = verboseDisplayLogging }
+            objectWillChange.send()
+        }
+    }
     @Published var audioEnabled: Bool = UserDefaults.standard.object(forKey: "fd.tbdisplaysender.audioEnabled") as? Bool ?? true {
         didSet {
             UserDefaults.standard.set(audioEnabled, forKey: "fd.tbdisplaysender.audioEnabled")
@@ -190,7 +197,8 @@ final class TBDisplaySenderService: ObservableObject {
             largeCursor: largeCursor,
             preventDisplaySleep: preventDisplaySleep,
             autoRestartOnWake: autoRestartOnWake,
-            audioEnabled: audioEnabled && audioRelayAvailable
+            audioEnabled: audioEnabled && audioRelayAvailable,
+            verboseDisplayLogging: verboseDisplayLogging
         )
         if let previous = sessions.last {
             session.capturePreset = previous.capturePreset

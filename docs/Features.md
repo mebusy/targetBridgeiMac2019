@@ -83,6 +83,7 @@ When input relay is active, TargetBridge can also:
 - switch control between slave sessions
 - keep or relay control focus depending on the chosen role
 - sync text clipboard contents in the direction of the active master
+- expose role-specific hotkeys so the active master can switch sender Spaces or change slave target without leaving the session model
 
 This is useful for KVM-like workflows where one keyboard and mouse should control another connected Mac without leaving the TargetBridge session model.
 

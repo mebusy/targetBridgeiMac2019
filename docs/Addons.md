@@ -100,6 +100,12 @@ When `This Mac is Master` is active, you can also choose how to switch control b
 - keep the master's desktop behavior fully native
 - or use the left/right screen edge and the `Ctrl+Option+Left/Right` hotkeys to move control to the previous/next slave
 
+When `Receiver is Master` is active:
+
+- `Ctrl+Left/Right` is forwarded to the sender so the sender can switch Spaces/Desktop views
+- `Ctrl+Cmd+Left/Right` switches control between slave targets
+- `Ctrl+Option+Command+K` exits input control quickly in either direction
+
 The current implementation also includes:
 
 - text clipboard sync in the direction of the active master
@@ -112,6 +118,11 @@ Permissions
 
 - on the Sender, accessibility/input-monitoring approval may be needed so TargetBridge can observe keyboard and mouse activity or inject events locally
 - on the Receiver, accessibility/input-monitoring approval may be needed so TargetBridge can observe keyboard and mouse activity or inject events locally
+
+Practical rule:
+
+- `This Mac is Master`: sender needs to capture local input, receiver needs to inject it
+- `Receiver is Master`: receiver needs to capture local input, sender needs to inject it
 
 Notes
 -----

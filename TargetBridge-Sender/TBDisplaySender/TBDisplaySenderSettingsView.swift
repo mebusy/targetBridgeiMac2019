@@ -57,6 +57,7 @@ struct TBDisplaySenderSettingsView: View {
                         .disabled(service.anyConnected)
                     Toggle(TBDisplaySenderL10n.preventDisplaySleep(service.language), isOn: $service.preventDisplaySleep)
                     Toggle(TBDisplaySenderL10n.autoRestartOnWake(service.language), isOn: $service.autoRestartOnWake)
+                    Toggle(TBDisplaySenderL10n.verboseDisplayLogging(service.language), isOn: $service.verboseDisplayLogging)
                 }
 
                 settingsSection(title: behaviorTitle) {

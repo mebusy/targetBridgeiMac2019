@@ -88,6 +88,7 @@ If you build from source, app outputs go into `build/` folder.
 - Sender usually needs `Screen Recording`.
 - `Input Dockstation` may also require `Accessibility` and `Input Monitoring`, depending on the active role.
 - Receiver may require `Accessibility` or `Input Monitoring` when it participates in input relay.
+- In practice, `Input Dockstation` is a two-sided feature: one Mac captures input, the other injects it, so permissions may be needed on both Sender and Receiver.
 - See [docs/Addons.md#input-dockstation](docs/Addons.md#input-dockstation) for the permission matrix.
 
 ## Quick start

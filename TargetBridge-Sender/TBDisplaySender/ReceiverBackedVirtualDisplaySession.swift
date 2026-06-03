@@ -18,14 +18,27 @@ struct TBVirtualDisplayIdentity {
         usesDedicatedArrangementIdentity: false
     )
 
-    static func extendedDesktop() -> TBVirtualDisplayIdentity {
-        let random = UInt32.random(in: 0x0100...0xFFFE)
+    static func extendedDesktop(for profile: TBMonitorDisplayProfile) -> TBVirtualDisplayIdentity {
+        // Deterministic identity per receiver so macOS retains window placement
+        // and the saved extended-desktop arrangement across reconnects.
+        let key = "\(profile.receiverName)|\(profile.panelWidth)x\(profile.panelHeight)"
+        let hash = djb2(key)
+        let productLow = (hash & 0x00FF) | 0x01
+        let serialLow = (hash & 0xFFFE) | 0x0100
         return TBVirtualDisplayIdentity(
-            productID: 0x6000 | (random & 0x00FF),
-            serialNumber: 0x2027_0000 | random,
+            productID: 0x6000 | productLow,
+            serialNumber: 0x2027_0000 | UInt32(serialLow),
             displayNamePrefix: "TB Extend",
             usesDedicatedArrangementIdentity: true
         )
+    }
+
+    private static func djb2(_ input: String) -> UInt32 {
+        var hash: UInt32 = 5381
+        for byte in input.utf8 {
+            hash = hash &* 33 &+ UInt32(byte)
+        }
+        return hash
     }
 }
 
