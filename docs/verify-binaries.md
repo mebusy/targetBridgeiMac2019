@@ -39,7 +39,7 @@ Run the `gh attestation verify` command on the downloaded ZIP file, specifying
 the official repository owner and name:
 
 ```bash
-gh attestation verify "/path/to/TargetBridge-arm64.app.zip" --owner "swellweb" --repo "targetBridge"
+gh attestation verify "/path/to/TargetBridge-arm64.app.zip" --repo "swellweb/targetBridge"
 ```
 
 ### Expected Successful Output
