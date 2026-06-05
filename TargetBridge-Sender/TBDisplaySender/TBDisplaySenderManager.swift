@@ -121,7 +121,7 @@ final class TBDisplaySenderService: ObservableObject {
         }
         refreshLocalInterfaces()
         addonStore.refresh()
-        addSession()
+        restorePersistedSessions()
         startClipboardMonitoring()
     }
 
@@ -213,6 +213,7 @@ final class TBDisplaySenderService: ObservableObject {
         }
         attachSession(session)
         sessions.append(session)
+        schedulePersist()
         objectWillChange.send()
     }
 
@@ -223,12 +224,121 @@ final class TBDisplaySenderService: ObservableObject {
         sessionCancellables.removeValue(forKey: session.id)
         normalizeAddonState()
         normalizeSessionInterfaces()
+        schedulePersist()
         objectWillChange.send()
     }
 
     func stopAll() {
         sessions.forEach { $0.persistExtendedDisplayArrangementSnapshot() }
         sessions.forEach { $0.stop(persistArrangement: false) }
+    }
+
+    // MARK: - Session persistence
+
+    private static let persistedSessionsKey = "fd.tbdisplaysender.sessions.v1"
+
+    /// Snapshot of the user-configurable settings for a single session. Runtime
+    /// state (connection, input master role, FPS, …) is intentionally excluded —
+    /// only the choices the user makes in the UI are remembered across launches.
+    private struct PersistedSession: Codable {
+        var transportKind: String
+        var localInterfaceIP: String
+        var receiverIP: String
+        var selectedReceiverID: String
+        var capturePreset: String
+        var captureSource: String
+        var audioEnabled: Bool
+        var brightness: Double
+        var inputGestureMode: String
+    }
+
+    private var lastPersistedData: Data?
+    private var persistScheduled = false
+
+    /// Coalesces the many synchronous `objectWillChange` notifications a single
+    /// user action produces into one write. Runs on the next main-loop tick, so
+    /// it observes the post-change values rather than the pre-change ones that
+    /// `objectWillChange` fires with.
+    private func schedulePersist() {
+        guard !persistScheduled else { return }
+        persistScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.persistScheduled = false
+            self.persistSessions()
+        }
+    }
+
+    private func persistSessions() {
+        let configs = sessions.map { session in
+            PersistedSession(
+                transportKind: session.transportKind.rawValue,
+                localInterfaceIP: session.localInterfaceIP,
+                receiverIP: session.receiverIP,
+                selectedReceiverID: session.selectedReceiverID,
+                capturePreset: session.capturePreset.rawValue,
+                captureSource: session.captureSource.rawValue,
+                audioEnabled: session.audioEnabled,
+                brightness: session.brightness,
+                inputGestureMode: session.inputGestureMode.rawValue
+            )
+        }
+        guard let data = try? JSONEncoder().encode(configs) else { return }
+        // Streaming churns `objectWillChange` constantly; skip redundant writes.
+        guard data != lastPersistedData else { return }
+        lastPersistedData = data
+        UserDefaults.standard.set(data, forKey: Self.persistedSessionsKey)
+    }
+
+    private func restorePersistedSessions() {
+        guard let data = UserDefaults.standard.data(forKey: Self.persistedSessionsKey),
+              let configs = try? JSONDecoder().decode([PersistedSession].self, from: data),
+              !configs.isEmpty
+        else {
+            addSession()
+            return
+        }
+
+        lastPersistedData = data
+        for config in configs {
+            let session = TBDisplaySenderSession(
+                language: language,
+                largeCursor: largeCursor,
+                preventDisplaySleep: preventDisplaySleep,
+                autoRestartOnWake: autoRestartOnWake,
+                audioEnabled: audioEnabled && audioRelayAvailable,
+                verboseDisplayLogging: verboseDisplayLogging
+            )
+            apply(config, to: session)
+            session.audioAddonAvailable = audioRelayAvailable
+            attachSession(session)
+            sessions.append(session)
+        }
+        // Drop transports/audio for addons that are no longer enabled and make
+        // sure every restored interface still exists on this machine.
+        normalizeAddonState()
+        normalizeSessionInterfaces()
+        objectWillChange.send()
+    }
+
+    private func apply(_ config: PersistedSession, to session: TBDisplaySenderSession) {
+        if let transport = TBTransportKind(rawValue: config.transportKind) {
+            session.transportKind = transport
+        }
+        if let preset = TBDisplayCapturePreset(rawValue: config.capturePreset) {
+            session.capturePreset = preset
+        }
+        if let source = TBDisplayCaptureSource(rawValue: config.captureSource) {
+            session.captureSource = source
+        }
+        if let gesture = TBInputGestureMode(rawValue: config.inputGestureMode) {
+            session.inputGestureMode = gesture
+        }
+        session.receiverIP = config.receiverIP
+        session.selectedReceiverID = config.selectedReceiverID
+        session.localInterfaceIP = config.localInterfaceIP
+        session.audioEnabled = config.audioEnabled && audioRelayAvailable
+        session.brightness = config.brightness
     }
 
     func refreshLocalInterfaces() {
@@ -324,6 +434,7 @@ final class TBDisplaySenderService: ObservableObject {
         }
         sessionCancellables[session.id] = session.objectWillChange.sink { [weak self] _ in
             self?.updateInputRelayController()
+            self?.schedulePersist()
             self?.objectWillChange.send()
         }
     }
