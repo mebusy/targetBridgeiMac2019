@@ -865,7 +865,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         switch service.language {
         case .italian: return "Scegli il percorso di rete per questa sessione. Thunderbolt Bridge resta il profilo raccomandato; Network Link e sperimentale."
         case .english: return "Choose the network path for this session. Thunderbolt Bridge remains the recommended profile; Network Link is experimental."
-        case .german: return "Wahle den Netzwerkpfad fuer diese Sitzung. Thunderbolt Bridge bleibt die empfohlene Option; Network Link ist experimentell."
+        case .german: return "Wähle den Netzwerkpfad für diese Sitzung. Thunderbolt Bridge bleibt die empfohlene Option; Network Link ist experimentell."
         case .chinese: return "为该会话选择网络路径。Thunderbolt Bridge 仍然是推荐模式；Network Link 为实验性功能。"
         }
     }
@@ -883,7 +883,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         switch service.language {
         case .italian: return "Seleziona un receiver rilevato automaticamente oppure lascia inserimento manuale."
         case .english: return "Select an automatically discovered receiver or keep manual entry."
-        case .german: return "Wahle einen automatisch gefundenen Empfanger oder bleibe bei der manuellen Eingabe."
+        case .german: return "Wähle einen automatisch gefundenen Empfänger oder bleibe bei der manuellen Eingabe."
         case .chinese: return "选择自动发现的 receiver，或者保持手动输入。"
         }
     }
@@ -892,7 +892,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         switch service.language {
         case .italian: return "Indirizzo diretto del receiver. Puoi usare IP Thunderbolt o LAN a seconda del trasporto."
         case .english: return "Direct receiver address. You can use a Thunderbolt or LAN IP depending on the selected transport."
-        case .german: return "Direkte Empfangeradresse. Je nach gewahltem Transport kann eine Thunderbolt- oder LAN-IP verwendet werden."
+        case .german: return "Direkte Empfängeradresse. Je nach gewähltem Transport kann eine Thunderbolt- oder LAN-IP verwendet werden."
         case .chinese: return "receiver 的直连地址。可以根据所选传输使用 Thunderbolt 或局域网 IP。"
         }
     }
@@ -910,7 +910,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         switch service.language {
         case .italian: return "Parti da preset conservativi su Wi-Fi o reti lente, poi sali se la stabilita rimane buona."
         case .english: return "Start with conservative presets on Wi-Fi or slower links, then move up if stability stays good."
-        case .german: return "Beginne bei WLAN oder langsameren Verbindungen mit konservativen Profilen und gehe dann bei stabiler Verbindung nach oben."
+        case .german: return "Beginne bei WLAN oder langsameren Verbindungen mit konservativen Profilen und wähle höhere Einstellungen, wenn die Verbindung stabil bleibt."
         case .chinese: return "在 Wi‑Fi 或较慢链路上先使用保守预设，稳定后再逐步提高。"
         }
     }
@@ -919,7 +919,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         switch service.language {
         case .italian: return "Invia anche l'audio di sistema del sender al receiver per questa sessione."
         case .english: return "Also send the sender’s system audio to the receiver for this session."
-        case .german: return "Ubertragt fur diese Sitzung auch den Systemton des Senders an den Empfanger."
+        case .german: return "Überträgt für diese Sitzung auch den Systemton des Senders an den Empfänger."
         case .chinese: return "同时将 sender 的系统音频传到此会话的 receiver。"
         }
     }
@@ -937,7 +937,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         switch service.language {
         case .italian: return "Definisce il ruolo input di questa sessione. Una sola sessione puo avere un master attivo alla volta: questo Mac puo controllare il receiver, oppure il receiver puo controllare questo Mac. Per uscire rapidamente dal controllo usa Ctrl+Option+Command+K."
         case .english: return "Defines the input role for this session. Only one session can have an active master at a time: this Mac can control the receiver, or the receiver can control this Mac. Use Control+Option+Command+K to exit control quickly."
-        case .german: return "Legt die Eingaberolle fur diese Sitzung fest. Nur eine Sitzung kann gleichzeitig einen aktiven Master haben: Dieser Mac kann den Receiver steuern oder der Receiver kann diesen Mac steuern. Mit Ctrl+Option+Command+K beendest du die Steuerung schnell."
+        case .german: return "Legt die Eingaberolle für diese Sitzung fest. Nur eine Sitzung kann gleichzeitig einen aktiven Master haben: Dieser Mac kann den Empfänger steuern oder der Empfänger kann diesen Mac steuern. Mit Ctrl+Option+Command+K beendest du die Steuerung schnell."
         case .chinese: return "定义此会话的输入角色。同一时间只能有一个活动 master：这台 Mac 可以控制 receiver，或者 receiver 可以控制这台 Mac。按下 Control+Option+Command+K 可以快速退出控制。"
         }
     }
@@ -958,7 +958,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         case .english:
             return "Chooses how to move control from one slave to another when 'This Mac is Master' is active. In native mode, macOS keeps handling the master's desktop normally. In relay mode, TargetBridge uses the left/right screen edge and the Ctrl+Option+Left/Right hotkeys to move control to the previous or next slave."
         case .german:
-            return "Legt fest, wie die Steuerung von einem Slave zum anderen wechselt, wenn 'Dieser Mac ist Master' aktiv ist. Im nativen Modus verwaltet macOS den Desktop des Masters normal weiter. Im Relay-Modus nutzt TargetBridge den linken/rechten Bildschirmrand und die Hotkeys Ctrl+Option+Links/Rechts, um zum vorherigen oder nachsten Slave zu wechseln."
+            return "Legt fest, wie die Steuerung von einem Slave zum anderen wechselt, wenn 'Dieser Mac ist Master' aktiv ist. Im nativen Modus verwaltet macOS den Desktop des Masters normal weiter. Im Relay-Modus nutzt TargetBridge den linken/rechten Bildschirmrand und die Hotkeys Ctrl+Option+Links/Rechts, um zum vorherigen oder nächsten Slave zu wechseln."
         case .chinese:
             return "决定在“这台 Mac 是 Master”启用时如何在不同 slave 之间切换控制。原生模式下，macOS 继续正常处理 master 的桌面；relay 模式下，TargetBridge 会使用屏幕左右边缘以及 Ctrl+Option+Left/Right 热键，把控制切换到上一个或下一个 slave。"
         }
@@ -972,7 +972,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         case (.native, .chinese): return "保留 master 的原生桌面行为"
         case (.relayToSlave, .italian): return "Usa bordi schermo e hotkey per cambiare slave"
         case (.relayToSlave, .english): return "Use screen edges and hotkeys to switch slave"
-        case (.relayToSlave, .german): return "Bildschirmrander und Hotkeys fur Slave-Wechsel nutzen"
+        case (.relayToSlave, .german): return "Bildschirmränder und Hotkeys für Slave-Wechsel nutzen"
         case (.relayToSlave, .chinese): return "使用屏幕边缘和热键切换 slave"
         }
     }
@@ -989,7 +989,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         case (.senderMaster, .chinese): return "这台 Mac 是 Master"
         case (.receiverMaster, .italian): return "Receiver e Master"
         case (.receiverMaster, .english): return "Receiver is Master"
-        case (.receiverMaster, .german): return "Receiver ist Master"
+        case (.receiverMaster, .german): return "Empfänger ist Master"
         case (.receiverMaster, .chinese): return "Receiver 是 Master"
         }
     }
@@ -1010,7 +1010,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         case .english:
             return "To use 'Receiver is Master', this TargetBridge app on the sender must be allowed under Privacy & Security > Accessibility. Open the settings, enable the app you are actually running, then reopen the session."
         case .german:
-            return "Um 'Receiver ist Master' zu verwenden, muss diese TargetBridge-App auf dem Sender unter Datenschutz & Sicherheit > Bedienungshilfen erlaubt sein. Offne die Einstellungen, aktiviere die wirklich verwendete App und offne dann die Sitzung erneut."
+            return "Um 'Empfänger ist Master' zu verwenden, muss diese TargetBridge-App auf dem Sender unter Datenschutz & Sicherheit > Bedienungshilfen erlaubt sein. Öffne die Einstellungen, aktiviere die wirklich verwendete App und öffne dann die Sitzung erneut."
         case .chinese:
             return "要使用“Receiver 是 Master”，sender 上这份 TargetBridge 必须在“隐私与安全性 > 辅助功能”中被允许。打开设置，启用你当前运行的这份应用，然后重新打开会话。"
         }
@@ -1020,7 +1020,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         switch service.language {
         case .italian: return "Apri Accessibilita"
         case .english: return "Open Accessibility"
-        case .german: return "Bedienungshilfen offnen"
+        case .german: return "Bedienungshilfen öffnen"
         case .chinese: return "打开辅助功能"
         }
     }
@@ -1033,7 +1033,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         switch service.language {
         case .italian: return "Manca il monitoraggio input sul sender"
         case .english: return "Input Monitoring is missing on the sender"
-        case .german: return "Input Monitoring fehlt auf dem Sender"
+        case .german: return "Eingabeüberwachung fehlt auf dem Sender"
         case .chinese: return "sender 缺少输入监控权限"
         }
     }
@@ -1045,7 +1045,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         case .english:
             return "To use 'This Mac is Master' reliably outside the active app window, the sender needs Input Monitoring permission. Without it, some keys or global pointer events may not be captured."
         case .german:
-            return "Damit 'Dieser Mac ist Master' auch ausserhalb des aktiven Fensters zuverlassig funktioniert, braucht der Sender die Berechtigung fuer Input Monitoring. Ohne diese konnen einige Tasten oder globale Zeigerereignisse fehlen."
+            return "Damit 'Dieser Mac ist Master' auch außerhalb des aktiven Fensters zuverlässig funktioniert, braucht der Sender die Berechtigung für Eingabeüberwachung. Ohne diese können einige Tasten oder globale Zeigerereignisse fehlen."
         case .chinese:
             return "要让“这台 Mac 是 Master”在活动窗口之外也可靠工作，sender 需要“输入监控”权限。没有它，一些按键或全局指针事件可能无法被捕获。"
         }
@@ -1055,7 +1055,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         switch service.language {
         case .italian: return "Manca Accessibilita sul receiver"
         case .english: return "Accessibility is missing on the receiver"
-        case .german: return "Bedienungshilfen fehlen auf dem Receiver"
+        case .german: return "Bedienungshilfen fehlen auf dem Empfänger"
         case .chinese: return "receiver 缺少辅助功能权限"
         }
     }
@@ -1067,7 +1067,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         case .english:
             return "With 'This Mac is Master', the receiver must be allowed to inject clicks and keyboard events. On the receiver Mac, enable TargetBridge Receiver under Privacy & Security > Accessibility."
         case .german:
-            return "Bei 'Dieser Mac ist Master' muss der Receiver Klicks und Tastatureingaben injizieren durfen. Aktiviere auf dem Receiver-Mac TargetBridge Receiver unter Datenschutz & Sicherheit > Bedienungshilfen."
+            return "Bei 'Dieser Mac ist Master' muss der Empfänger Klicks und Tastatureingaben injizieren dürfen. Aktiviere auf dem Empfänger-Mac TargetBridge-Receiver unter Datenschutz & Sicherheit > Bedienungshilfen."
         case .chinese:
             return "在“这台 Mac 是 Master”模式下，receiver 必须被允许注入点击和键盘事件。请在 receiver Mac 的“隐私与安全性 > 辅助功能”中启用 TargetBridge Receiver。"
         }
@@ -1077,7 +1077,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         switch service.language {
         case .italian: return "Manca Monitoraggio input sul receiver"
         case .english: return "Input Monitoring is missing on the receiver"
-        case .german: return "Input Monitoring fehlt auf dem Receiver"
+        case .german: return "Eingabeüberwachung fehlt auf dem Empfänger"
         case .chinese: return "receiver 缺少输入监控权限"
         }
     }
@@ -1089,7 +1089,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         case .english:
             return "With 'Receiver is Master', the receiver Mac must be allowed to read local keyboard and mouse input. On the receiver, enable TargetBridge Receiver under Privacy & Security > Input Monitoring."
         case .german:
-            return "Bei 'Receiver ist Master' muss der Receiver-Mac lokale Tastatur- und Mauseingaben lesen durfen. Aktiviere dort TargetBridge Receiver unter Datenschutz & Sicherheit > Input Monitoring."
+            return "Bei 'Empfänger ist Master' muss der Empfänger-Mac lokale Tastatur- und Mauseingaben lesen dürfen. Aktiviere dort TargetBridge-Receiver unter Datenschutz & Sicherheit > Eingabeüberwachung."
         case .chinese:
             return "在“Receiver 是 Master”模式下，receiver Mac 必须被允许读取本地键盘和鼠标输入。请在 receiver 上的“隐私与安全性 > 输入监控”中启用 TargetBridge Receiver。"
         }
@@ -1099,7 +1099,7 @@ private struct TBDisplaySenderSessionSettingsSheet: View {
         switch service.language {
         case .italian: return "Apri Monitoraggio input"
         case .english: return "Open Settings"
-        case .german: return "Einstellungen offnen"
+        case .german: return "Einstellungen öffnen"
         case .chinese: return "打开设置"
         }
     }

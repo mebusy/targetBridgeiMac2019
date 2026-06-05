@@ -382,7 +382,7 @@ enum TBDisplaySenderL10n {
         switch language {
         case .italian: return "Diagnostica display in Console (verboso)"
         case .english: return "Log virtual display events to Console (verbose)"
-        case .german: return "Virtuelle Display-Ereignisse in Console protokollieren (ausführlich)"
+        case .german: return "Virtuelle Display-Ereignisse in Konsole protokollieren (ausführlich)"
         case .chinese: return "将虚拟显示事件详细记录到 Console"
         }
     }
