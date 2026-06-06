@@ -1636,16 +1636,38 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         CGEvent(source: nil)?.location
     }
 
+    // Bounds of every active display, in the Quartz global coordinate space
+    // (top-left origin) — matching CGEvent locations and CGWarpMouseCursorPosition.
+    // NSScreen.frame uses AppKit's bottom-left origin and must not be mixed in here.
+    private func activeDisplayBounds() -> [CGRect] {
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        guard CGGetActiveDisplayList(count, &ids, &count) == .success else { return [] }
+        return ids.prefix(Int(count)).map { CGDisplayBounds($0) }
+    }
+
     private func screenFrame(containing point: CGPoint) -> CGRect? {
-        NSScreen.screens.first(where: { $0.frame.contains(point) })?.frame
+        activeDisplayBounds().first(where: { $0.contains(point) })
     }
 
     private func clampedMouseTarget(from current: CGPoint, dx: Int, dy: Int) -> CGPoint {
         let rawTarget = CGPoint(x: current.x + CGFloat(dx), y: current.y + CGFloat(dy))
-        guard let frame = screenFrame(containing: current) ?? NSScreen.screens.first?.frame else {
+        let displays = activeDisplayBounds()
+        guard !displays.isEmpty else { return rawTarget }
+
+        // If the target lands on any display, allow it unchanged. This lets the
+        // relayed cursor cross from one screen onto an adjacent one (e.g. the
+        // receiver-backed virtual extended display), matching how the pointer
+        // behaves with the local touchpad. Clamping to a single screen's bounds
+        // previously trapped the pointer on the sender's main display (issue #97).
+        if displays.contains(where: { $0.contains(rawTarget) }) {
             return rawTarget
         }
 
+        // Off every display: keep the pointer on the display it is currently on so
+        // the injected cursor can never get lost in a gap between displays.
+        let frame = displays.first(where: { $0.contains(current) }) ?? displays[0]
         let minX = frame.minX
         let maxX = frame.maxX - 1
         let minY = frame.minY
