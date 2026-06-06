@@ -20,7 +20,7 @@
 #include <string.h>
 
 #ifndef TB_RECEIVER_VERSION
-#define TB_RECEIVER_VERSION "3.0"
+#define TB_RECEIVER_VERSION "3.0.1"
 #endif
 
 #ifndef TB_RECEIVER_BUILD
