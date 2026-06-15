@@ -56,13 +56,26 @@ open -a TargetBridge --args --connect --receiver auto --mode mirror --preset 144
 ## Recipes
 
 **Connect from another Mac over SSH** — the Sender must be at a logged-in desktop with
-TargetBridge installed. The URL has to open inside that GUI session, so wrap it with
-`launchctl asuser`:
+TargetBridge installed.
+
+Start with the simplest form first:
+
+```bash
+ssh <sender-user>@<sender-host> \
+  "open 'targetbridge://connect?receiver=auto&mode=mirror&preset=1440p'"
+```
+
+On some macOS setups, if LaunchServices does not deliver the URL into the active GUI
+session from a plain remote shell, fall back to `launchctl asuser`:
 
 ```bash
 ssh <sender-user>@<sender-host> \
   "launchctl asuser \$(id -u <sender-user>) open 'targetbridge://connect?receiver=auto&mode=mirror&preset=1440p'"
 ```
+
+If that still fails with an audit-session permission error, try the same command through
+`sudo` from an interactive SSH session (`ssh -t ...`), because the GUI handoff can be more
+strict on some systems.
 
 **Auto-connect on wake (Hammerspoon, on the sender):**
 
@@ -91,6 +104,9 @@ is up (e.g. poll until the display appears, then run your saved `displayplacer "
 - These commands are fire-and-forget: the CLI / `open` returns as soon as the URL is
   delivered, which is **not** the same as "streaming established." Check the app (or its
   log: `log show --predicate 'eventMessage CONTAINS "[automation]"' --last 2m`) to confirm.
+- For remote SSH automation, a plain `open 'targetbridge://...'` is often enough and is the
+  least brittle option. Use `launchctl asuser` only when the plain form does not reach the
+  active GUI session on the sender.
 - `connect` without `--session` targets session 1 and updates its saved receiver, same as
   changing it in the GUI.
 - On a cold launch, `receiver=auto` waits briefly for Bonjour; if discovery is slow on the

@@ -115,14 +115,10 @@ TargetBridge source code is available under the MIT License. Please preserve the
 required copyright and license notices when redistributing copies or substantial
 portions of the software.
 
-Project branding is handled separately from the source code license:
+Project branding and commercial use are handled separately from the source code
+license. For now, the canonical source-code license is:
 
 - [LICENSE](LICENSE)
-- [NOTICE](NOTICE)
-- [TRADEMARKS.md](TRADEMARKS.md)
-- [COMMERCIAL.md](COMMERCIAL.md)
-- [docs/Licensing-Strategy.md](docs/Licensing-Strategy.md)
-- [docs/Copyright-Headers.md](docs/Copyright-Headers.md)
 
 ## Screenshots
 
