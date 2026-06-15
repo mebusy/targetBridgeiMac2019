@@ -1749,7 +1749,28 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         default: break
         }
         guard let event = CGEvent(keyboardEventSource: localInputEventSource(), virtualKey: CGKeyCode(keyCode), keyDown: isDown) else { return }
+        event.flags = currentInjectedModifierFlags()
         event.post(tap: .cghidEventTap)
+    }
+
+    private func currentInjectedModifierFlags() -> CGEventFlags {
+        var flags: CGEventFlags = []
+        if injectedCommandDown {
+            flags.insert(.maskCommand)
+        }
+        if injectedShiftDown {
+            flags.insert(.maskShift)
+        }
+        if injectedOptionDown {
+            flags.insert(.maskAlternate)
+        }
+        if injectedControlDown {
+            flags.insert(.maskControl)
+        }
+        if injectedCapsDown {
+            flags.insert(.maskAlphaShift)
+        }
+        return flags
     }
 
     private func releaseInjectedModifiersIfNeeded() {
