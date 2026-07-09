@@ -30,63 +30,63 @@ enum TBDisplayCapturePreset: String, CaseIterable, Identifiable {
         case .crisp2160p60:
             return "Crisp"
         case .native5k:
-            return "5K"
+            return "4K"
         }
     }
 
     var description: String {
         switch self {
         case .standard1440p:
-            return "2560 × 1440"
+            return "2048 × 1152"
         case .smooth1440p60:
-            return "2560 × 1440 @ 60"
+            return "2048 × 1152 @ 60"
         case .smooth1800p60:
-            return "3200 × 1800 @ 60"
+            return "2560 × 1440 @ 60"
         case .crisp2160p60:
-            return "3840 × 2160 @ 60"
+            return "3200 × 1800 @ 48"
         case .native5k:
-            return "5120 × 2880 @ 48"
+            return "4096 × 2304 @ 48"
         }
     }
 
     var width: Int {
         switch self {
         case .standard1440p, .smooth1440p60:
-            return 2560
+            return 2048
         case .smooth1800p60:
-            return 3200
+            return 2560
         case .crisp2160p60:
-            return 3840
+            return 3200
         case .native5k:
-            return 5120
+            return 4096
         }
     }
 
     var height: Int {
         switch self {
         case .standard1440p, .smooth1440p60:
-            return 1440
+            return 1152
         case .smooth1800p60:
-            return 1800
+            return 1440
         case .crisp2160p60:
-            return 2160
+            return 1800
         case .native5k:
-            return 2880
+            return 2304
         }
     }
 
     var averageBitRate: Int {
         switch self {
         case .standard1440p:
-            return 36_000_000
+            return 28_000_000
         case .smooth1440p60:
-            return 52_000_000
+            return 40_000_000
         case .smooth1800p60:
-            return 78_000_000
+            return 52_000_000
         case .crisp2160p60:
-            return 105_000_000
+            return 78_000_000
         case .native5k:
-            return 120_000_000
+            return 105_000_000
         }
     }
 
@@ -119,14 +119,19 @@ enum TBDisplayCapturePreset: String, CaseIterable, Identifiable {
         switch self {
         case .standard1440p:
             return 30
-        case .smooth1440p60:
+        case .smooth1440p60, .smooth1800p60:
             return 60
-        case .smooth1800p60:
-            return 60
-        case .crisp2160p60:
-            return 60
-        case .native5k:
+        case .crisp2160p60, .native5k:
             return 48
+        }
+    }
+
+    var supportsReceiverHEVC: Bool {
+        switch self {
+        case .standard1440p, .smooth1440p60, .smooth1800p60:
+            return false
+        case .crisp2160p60, .native5k:
+            return true
         }
     }
 
@@ -134,90 +139,77 @@ enum TBDisplayCapturePreset: String, CaseIterable, Identifiable {
         switch self {
         case .standard1440p:
             return 60
-        case .smooth1440p60:
-            return 60
-        case .smooth1800p60:
-            return 60
-        case .crisp2160p60:
-            return 60
-        case .native5k:
-            return 48
+        case .smooth1440p60, .smooth1800p60:
+            return 120
+        case .crisp2160p60, .native5k:
+            return 96
         }
     }
 
-    var maxKeyFrameIntervalDuration: Int {
+    var maxKeyFrameIntervalDuration: Double {
+        Double(maxKeyFrameInterval) / Double(expectedFrameRate)
+    }
+
+    var maxFrameDelayCount: Int {
         switch self {
         case .standard1440p:
             return 2
-        case .smooth1440p60:
-            return 1
-        case .smooth1800p60, .crisp2160p60:
-            return 1
-        case .native5k:
+        case .smooth1440p60, .smooth1800p60:
+            return 2
+        case .crisp2160p60, .native5k:
             return 1
         }
     }
 
     var prioritizeSpeed: Bool {
         switch self {
-        case .standard1440p:
-            return false
-        case .smooth1440p60, .smooth1800p60, .crisp2160p60, .native5k:
-            return true
-        }
-    }
-
-    var maxPendingVideoPackets: Int {
-        if let envVal = ProcessInfo.processInfo.environment["MPVP"], let parsed = Int(envVal) {
-            return parsed
-        }
-        return 3
-    }
-
-    var maxFrameDelayCount: Int {
-        switch self {
-        case .standard1440p:
-            return 1
-        case .smooth1440p60, .smooth1800p60, .crisp2160p60, .native5k:
-            return 0
-        }
-    }
-
-    var dropsBeforeEncodeWhenBacklogged: Bool {
-        switch self {
-        case .standard1440p:
-            return false
-        case .smooth1440p60, .smooth1800p60, .crisp2160p60, .native5k:
-            return true
-        }
-    }
-
-    var maxInFlightEncodeFrames: Int {
-        if let envVal = ProcessInfo.processInfo.environment["MIFEF"], let parsed = Int(envVal) {
-            return parsed
-        }
-        return 5
-    }
-
-    var captureResolution: SCCaptureResolutionType {
-        switch self {
         case .standard1440p, .smooth1440p60, .smooth1800p60:
-            return .nominal
+            return true
         case .crisp2160p60, .native5k:
-            return .best
+            return false
         }
     }
 
     var virtualDisplayRefreshRate: Double {
         switch self {
         case .standard1440p:
-            return 60
+            return 30
         case .smooth1440p60, .smooth1800p60:
             return 60
-        case .crisp2160p60:
-            return 60
-        case .native5k:
+        case .crisp2160p60, .native5k:
             return 48
+        }
+    }
+
+
+    var dropsBeforeEncodeWhenBacklogged: Bool {
+        switch self {
+        case .standard1440p, .smooth1440p60, .smooth1800p60:
+            return true
+        case .crisp2160p60, .native5k:
+            return false
+        }
+    }
+
+    var maxPendingVideoPackets: Int {
+        switch self {
+        case .standard1440p:
+            return 3
+        case .smooth1440p60, .smooth1800p60:
+            return 4
+        case .crisp2160p60, .native5k:
+            return 5
+        }
+    }
+
+    var maxInFlightEncodeFrames: Int {
+        switch self {
+        case .standard1440p:
+            return 2
+        case .smooth1440p60, .smooth1800p60:
+            return 3
+        case .crisp2160p60, .native5k:
+            return 3
         }
     }
 }
@@ -1998,7 +1990,6 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
             configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
             configuration.showsCursor = !largeCursor
             configuration.scalesToFit = true
-            configuration.captureResolution = preset.captureResolution
             configuration.capturesAudio = true
             configuration.excludesCurrentProcessAudio = true
             configuration.sampleRate = 48000
