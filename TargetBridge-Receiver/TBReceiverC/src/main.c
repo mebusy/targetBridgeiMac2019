@@ -1577,6 +1577,10 @@ static void send_receiver_info(struct app* a) {
       tb_dec_supports_hevc_hwdecode() ? "true" : "false",
       tb_receiver_input_monitoring_trusted() ? "true" : "false",
       tb_receiver_accessibility_trusted() ? "true" : "false");
+
+  fprintf(stderr, "[profile] panel=%ux%u mode=%ux%u capture=%ux%u\n", panel_w, panel_h, mode_w,
+          mode_h, capture_w, capture_h);
+
   if (json_len <= 0 || (size_t)json_len >= sizeof(json))
     return;
 
