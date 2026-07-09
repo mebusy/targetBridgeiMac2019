@@ -38,6 +38,20 @@ dylibbundler -od -b \
   -d "$APP_DIR/Contents/Frameworks/" \
   -p @executable_path/../Frameworks/ \
   >/dev/null 2>&1
+# Bundle SDL3 too when Homebrew's SDL2 is actually sdl2-compat.
+SDL3_DYLIB=""
+if [[ -f /usr/local/lib/libSDL3.dylib ]]; then
+  SDL3_DYLIB="/usr/local/lib/libSDL3.dylib"
+elif [[ -f /opt/homebrew/lib/libSDL3.dylib ]]; then
+  SDL3_DYLIB="/opt/homebrew/lib/libSDL3.dylib"
+fi
+
+if [[ -n "$SDL3_DYLIB" ]]; then
+  echo "Bundling SDL3 runtime: $SDL3_DYLIB"
+  cp -f "$SDL3_DYLIB" "$APP_DIR/Contents/Frameworks/libSDL3.dylib"
+  install_name_tool -id "@executable_path/../Frameworks/libSDL3.dylib" \
+    "$APP_DIR/Contents/Frameworks/libSDL3.dylib" >/dev/null 2>&1 || true
+fi
 
 if [[ -f "$ICON_FILE" ]]; then
   mkdir -p "${ICONSET_DIR}/TargetBridgeReceiver.iconset"
