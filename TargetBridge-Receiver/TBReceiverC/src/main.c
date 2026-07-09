@@ -1566,6 +1566,9 @@ static void send_receiver_info(struct app* a) {
   }
   escaped_name[out] = '\0';
 
+  fprintf(stderr, "[profile] panel=%ux%u mode=%ux%u capture=%ux%u hevc=%s\n", panel_w, panel_h,
+          mode_w, mode_h, capture_w, capture_h, tb_dec_supports_hevc_hwdecode() ? "true" : "false");
+
   char json[768];
   int json_len = snprintf(
       json, sizeof(json),
