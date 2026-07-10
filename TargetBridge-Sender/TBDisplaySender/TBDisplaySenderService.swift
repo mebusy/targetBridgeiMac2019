@@ -2009,9 +2009,26 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
             delegate.onAudio = { [weak self] sampleBuffer in
                 self?.processAudio(sampleBuffer)
             }
+
             delegate.onError = { [weak self] error in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
+
+                    let ns = error as NSError
+
+                    if ns.domain == SCStreamErrorDomain &&
+                       ns.code == -3815 {
+
+                        NSLog("TargetBridge: capture source disappeared, scheduling restart")
+
+                        self.scheduleCaptureRestart(
+                            reason: "capture source disappeared",
+                            delaySeconds: 1.0
+                        )
+
+                        return
+                    }
+
                     self.setStatus(.captureError(self.formattedCaptureErrorMessage(for: error)))
                     self.stop(resetStatusTo: nil)
                 }
@@ -2626,7 +2643,13 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
     }
 
     private func scheduleCaptureRestart(reason: String, delaySeconds: Double) {
-        guard isStreaming, !isRestartingCaptureAfterWake, let profile = activeProfile else { return }
+        // guard isStreaming, !isRestartingCaptureAfterWake, let profile = activeProfile else { return }
+        guard connection != nil,
+          let profile = activeProfile,
+          !isRestartingCaptureAfterWake
+        else {
+            return
+        }
         isRestartingCaptureAfterWake = true
         NSLog("TargetBridge: \(reason) — soft restart of capture pipeline")
         Task { @MainActor [weak self] in
@@ -2679,9 +2702,22 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         lastCursorPacket = nil
 
         let started = await startCapture(for: profile)
+        // if !started {
+        //     NSLog("TargetBridge: soft restart after wake failed — falling back to full stop")
+        //     stop(resetStatusTo: .captureError("capture restart after wake failed"))
+        // }
         if !started {
-            NSLog("TargetBridge: soft restart after wake failed — falling back to full stop")
-            stop(resetStatusTo: .captureError("capture restart after wake failed"))
+
+            NSLog("display not available, retry in 1 second")
+
+            isRestartingCaptureAfterWake = false
+
+            scheduleCaptureRestart(
+                reason: "waiting for display",
+                delaySeconds: 1.0
+            )
+
+            return
         }
     }
 
