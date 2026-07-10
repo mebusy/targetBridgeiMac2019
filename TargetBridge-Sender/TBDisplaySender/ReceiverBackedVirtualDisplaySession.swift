@@ -97,7 +97,9 @@ final class ReceiverBackedVirtualDisplaySession {
             return false
         }
 
-        activatePreferredMode(for: display.displayID, profile: profile, refreshRate: preferredRefreshRate)
+        if !profile.hiDPI {
+            activatePreferredMode(for: display.displayID, profile: profile, refreshRate: preferredRefreshRate)
+        }
 
         virtualDisplay = display
         displayID = display.displayID
