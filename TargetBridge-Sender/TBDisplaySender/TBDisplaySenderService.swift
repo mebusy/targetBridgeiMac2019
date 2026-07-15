@@ -2115,6 +2115,30 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         )
     }
 
+    private func activeDisplayIDs() -> [CGDirectDisplayID] {
+
+        var count: UInt32 = 0
+
+        CGGetActiveDisplayList(
+            0,
+            nil,
+            &count
+        )
+
+        var displays = Array(
+            repeating: CGDirectDisplayID(),
+            count: Int(count)
+        )
+
+        CGGetActiveDisplayList(
+            count,
+            &displays,
+            &count
+        )
+
+        return displays
+    }
+
     private func waitForVirtualDisplay(
         matching targetDisplayID: CGDirectDisplayID,
         baselineDisplayIDs: Set<CGDirectDisplayID>
@@ -2131,14 +2155,45 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         }
 
         var lastContent: SCShareableContent?
-        for _ in 0..<80 {
+        for retry in 0..<120 {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
             lastContent = content
+
+            NSLog("""
+            retry=\(retry)
+
+            SC displays:
+            \(content.displays.map { "\($0.displayID)" })
+
+            CG online:
+            \(onlineDisplayIDs())
+
+            CG active:
+            \(activeDisplayIDs())
+
+            CG main:
+            \(CGMainDisplayID())
+
+            target:
+            \(targetDisplayID)
+            """)
+
             if let display = content.displays.first(where: { $0.displayID == targetDisplayID }) {
                 return display
             }
             if let display = content.displays.first(where: { !baselineDisplayIDs.contains($0.displayID) }) {
                 return display
+            }
+            //
+            // Sleep/Wake 后 baseline 有时已经失效。
+            //
+            if content.displays.count == 1 {
+
+                NSLog(
+                    "TargetBridge: using the only available SCDisplay (\(content.displays[0].displayID))"
+                )
+
+                return content.displays[0]
             }
             try await Task.sleep(nanoseconds: 250_000_000)
         }
@@ -2657,12 +2712,50 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
                 try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
             }
             guard let self else { return }
-            guard self.isStreaming, self.activeProfile?.receiverName == profile.receiverName else {
+            // 修改 1（必须）：修复 restart 的状态判断
+            guard self.connection != nil, self.activeProfile?.receiverName == profile.receiverName else {
                 self.isRestartingCaptureAfterWake = false
                 return
             }
+            await self.waitUntilAnySCDisplayExists()
             await self.softRestartCapture(for: profile)
             self.isRestartingCaptureAfterWake = false
+        }
+    }
+
+    private func waitUntilAnySCDisplayExists() async {
+
+        while true {
+
+            do {
+
+                let content =
+                    try await SCShareableContent.excludingDesktopWindows(
+                        false,
+                        onScreenWindowsOnly: false
+                    )
+
+                if !content.displays.isEmpty {
+
+                    NSLog(
+                        "TargetBridge: ScreenCaptureKit ready (\(content.displays.count) displays)"
+                    )
+
+                    return
+                }
+
+                NSLog(
+                    "TargetBridge: waiting for ScreenCaptureKit..."
+                )
+
+            } catch {
+
+                NSLog(
+                    "TargetBridge: waiting for ScreenCaptureKit (\(error))"
+                )
+            }
+
+            try? await Task.sleep(for: .seconds(1))
         }
     }
 
@@ -2709,8 +2802,6 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         if !started {
 
             NSLog("display not available, retry in 1 second")
-
-            isRestartingCaptureAfterWake = false
 
             scheduleCaptureRestart(
                 reason: "waiting for display",
