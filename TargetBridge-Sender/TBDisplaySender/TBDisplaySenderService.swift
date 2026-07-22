@@ -2016,18 +2016,38 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
 
                     let ns = error as NSError
 
-                    if ns.domain == SCStreamErrorDomain &&
-                       ns.code == -3815 {
+                    if ns.domain == SCStreamErrorDomain {
 
-                        NSLog("TargetBridge: capture source disappeared, scheduling restart")
+                        switch ns.code {
 
-                        self.scheduleCaptureRestart(
-                            reason: "capture source disappeared",
-                            delaySeconds: 1.0
-                        )
+                        case -3805:
 
-                        return
+                            NSLog("SCStream connection interrupted")
+
+                            scheduleCaptureRestart(
+                                reason: "SCStream interrupted",
+                                delaySeconds: 2
+                            )
+
+                            return
+
+                        case -3815:
+
+                            NSLog("Display unavailable")
+
+                            scheduleCaptureRestart(
+                                reason: "Display unavailable",
+                                delaySeconds: 1
+                            )
+
+                            return
+
+                        default:
+
+                            break
+                        }
                     }
+
 
                     self.setStatus(.captureError(self.formattedCaptureErrorMessage(for: error)))
                     self.stop(resetStatusTo: nil)
